@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erde und Sonne – 3D</title>
+<style>
+  :root { --text:#e8ecf4; --muted:#8a93a8; --earth:#4f9cff; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:#000; color:var(--text);
+    font-family:"Avenir Next","Segoe UI",system-ui,sans-serif; overflow:hidden; }
+  canvas { display:block; }
+  .panel { position:fixed; left:16px; bottom:16px; background:rgba(12,16,30,.82);
+    border:1px solid #2a3350; border-radius:10px; padding:12px 14px; font-size:14px; width:270px; }
+  .panel h1 { font-size:16px; margin:0 0 8px; font-weight:600; }
+  .row { display:flex; white-space:nowrap; justify-content:space-between; gap:12px; margin:3px 0; }
+  .row span:first-child { color:var(--muted); }
+  label { display:block; margin-top:10px; color:var(--muted); }
+  input[type=range] { width:100%; }
+  .buttons { display:flex; gap:8px; margin-top:10px; }
+  button { flex:1; padding:7px; border-radius:6px; border:1px solid #3a4568;
+    background:#1a2240; color:var(--text); font:inherit; cursor:pointer; }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--earth); outline-offset:2px; }
+  .hint { position:fixed; right:16px; bottom:16px; color:var(--muted); font-size:12px; }
+  #msg { position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    text-align:center; padding:24px; font-size:16px; line-height:1.5; }
+</style>
+<script type="importmap">
+  { "imports": { "three": "./lib/three-0.186.1.bundle.min.js" } }
+</script>
+</head>
+<body>
+<div id="msg"></div>
+<div class="panel">
+  <h1>Erde und Sonne</h1>
+  <div class="row"><span>Tag im Jahr</span><span id="day">0</span></div>
+  <div class="row"><span>Abstand zur Sonne</span><span id="dist">–</span></div>
+  <label for="speed">Zeitraffer: <span id="speedVal"></span></label>
+  <input id="speed" type="range" min="0" max="100" value="35">
+  <div class="buttons">
+    <button id="pause">Pause</button>
+    <button id="follow">Zur Erde</button>
+  </div>
+</div>
+<div class="hint">Ziehen: drehen · Scrollen: zoomen</div>
+
+<script>
+  // Hinweis, falls die Datei per Doppelklick geöffnet wird
+  if (location.protocol === 'file:') {
+    const m = document.getElementById('msg');
+    m.style.display = 'flex';
+    m.textContent = 'Diese Simulation muss über den Web-Link (github.io) geöffnet werden, nicht per Doppelklick.';
+  }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three';
+
+// ---------- Physikalische Daten (echte Werte) ----------
+const T_YEAR = 365.256;           // Umlaufzeit in Tagen
+const T_DAY  = 0.99727;           // Sterntag in Tagen (eine Drehung um die eigene Achse)
+const ECC    = 0.0167;            // Exzentrizität der Erdbahn
+const TILT   = THREE.MathUtils.degToRad(23.44); // Achsneigung
+const AU_KM  = 149597870.7;
+
+// ---------- Darstellungsmaßstab (NICHT maßstabsgetreu) ----------
+const ORBIT = 40;    // Bahnradius in Szeneneinheiten
+const R_SUN = 5;
+const R_EARTH = 1.2;
+
+// ---------- Grundgerüst ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 2000);
+camera.position.set(0, 45, 75);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- Sterne ----------
+{
+  const pos = [];
+  for (let i = 0; i < 3000; i++) {
+    const v = new THREE.Vector3().randomDirection().multiplyScalar(600 + Math.random() * 300);
+    pos.push(v.x, v.y, v.z);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, sizeAttenuation: false })));
+}
+
+// ---------- Sonne ----------
+const sun = new THREE.Mesh(
+  new THREE.SphereGeometry(R_SUN, 64, 32),
+  new THREE.MeshBasicMaterial({ color: 0xffd27a })
+);
+scene.add(sun);
+
+// Leuchten um die Sonne (Gradient als Sprite)
+{
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(128, 128, 0, 128, 128, 128);
+  g.addColorStop(0, 'rgba(255,230,160,1)');
+  g.addColorStop(0.25, 'rgba(255,190,80,0.6)');
+  g.addColorStop(1, 'rgba(255,140,30,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(c), blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  glow.scale.set(R_SUN * 6, R_SUN * 6, 1);
+  scene.add(glow);
+}
+
+// Licht geht von der Sonne aus
+const sunLight = new THREE.PointLight(0xffffff, 4, 0, 0);
+scene.add(sunLight);
+scene.add(new THREE.AmbientLight(0xffffff, 0.04));
+
+// ---------- Erde ----------
+const loader = new THREE.TextureLoader();
+const dayMap = loader.load('./textures/earth_day_4096.jpg');
+dayMap.colorSpace = THREE.SRGBColorSpace;
+dayMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
+const cloudMap = loader.load('./textures/earth_clouds_1024.png');
+cloudMap.colorSpace = THREE.SRGBColorSpace;
+
+// earthAxis trägt die feste Achsneigung, earth dreht sich darin um die eigene Achse
+const earthAxis = new THREE.Group();
+earthAxis.rotation.z = TILT;
+scene.add(earthAxis);
+
+const earth = new THREE.Mesh(
+  new THREE.SphereGeometry(R_EARTH, 96, 48),
+  new THREE.MeshStandardMaterial({ map: dayMap, roughness: 0.9, metalness: 0 })
+);
+earthAxis.add(earth);
+
+const clouds = new THREE.Mesh(
+  new THREE.SphereGeometry(R_EARTH * 1.012, 96, 48),
+  new THREE.MeshStandardMaterial({ map: cloudMap, transparent: true, opacity: 0.85, depthWrite: false })
+);
+earthAxis.add(clouds);
+
+// Erdachse als dünne Linie (zeigt immer in dieselbe Richtung im Raum)
+{
+  const g = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, -R_EARTH * 1.6, 0), new THREE.Vector3(0, R_EARTH * 1.6, 0)
+  ]);
+  earthAxis.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x9fb4ff, transparent: true, opacity: 0.6 })));
+}
+
+// ---------- Kepler-Bahn ----------
+function orbitPos(tDays) {
+  const M = 2 * Math.PI * (((tDays % T_YEAR) + T_YEAR) % T_YEAR) / T_YEAR;
+  let E = M;
+  for (let i = 0; i < 6; i++) E -= (E - ECC * Math.sin(E) - M) / (1 - ECC * Math.cos(E));
+  return {
+    x: ORBIT * (Math.cos(E) - ECC),
+    z: -ORBIT * Math.sqrt(1 - ECC * ECC) * Math.sin(E),
+    r: 1 - ECC * Math.cos(E)          // Abstand in AE
+  };
+}
+{
+  const pts = [];
+  for (let k = 0; k <= 256; k++) { const p = orbitPos(T_YEAR * k / 256); pts.push(new THREE.Vector3(p.x, 0, p.z)); }
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: 0x5a6788, transparent: true, opacity: 0.5 })));
+}
+
+// ---------- Steuerung ----------
+const dayEl = document.getElementById('day'), distEl = document.getElementById('dist');
+const speedEl = document.getElementById('speed'), speedVal = document.getElementById('speedVal');
+const pauseBtn = document.getElementById('pause'), followBtn = document.getElementById('follow');
+
+// Regler logarithmisch: 0,02 bis 60 Tage pro Sekunde
+const speed = () => 0.02 * Math.pow(3000, speedEl.value / 100);
+function showSpeed() {
+  const s = speed();
+  speedVal.textContent = s < 1 ? `${(s * 24).toFixed(1)} Std./s` : `${s.toFixed(1)} Tage/s`;
+}
+speedEl.addEventListener('input', showSpeed);
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) speedEl.value = 20;
+showSpeed();
+
+let running = true, follow = false;
+pauseBtn.onclick = () => { running = !running; pauseBtn.textContent = running ? 'Pause' : 'Weiter'; };
+followBtn.onclick = () => {
+  follow = !follow;
+  followBtn.textContent = follow ? 'Zur Sonne' : 'Zur Erde';
+  if (!follow) { controls.target.set(0, 0, 0); camera.position.set(0, 45, 75); }
+  else {                              // Kamera auf die Tagseite, leicht schräg
+    const toSun = earthAxis.position.clone().negate().normalize();
+    const side = new THREE.Vector3(0, 1, 0).cross(toSun).multiplyScalar(3);
+    camera.position.copy(earthAxis.position).add(toSun.multiplyScalar(6)).add(side).add(new THREE.Vector3(0, 2, 0));
+  }
+};
+
+// ---------- Animation ----------
+let t = 0, last = performance.now();
+const prevEarth = new THREE.Vector3();
+
+function animate(now) {
+  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (running) t += dt * speed();
+
+  const p = orbitPos(t);
+  prevEarth.copy(earthAxis.position);
+  earthAxis.position.set(p.x, 0, p.z);
+
+  earth.rotation.y  = 2 * Math.PI * (t / T_DAY);
+  clouds.rotation.y = 2 * Math.PI * (t / T_DAY) * 1.03;   // Wolken leicht schneller
+
+  if (follow) {                         // Kamera mit der Erde mitführen
+    camera.position.add(earthAxis.position.clone().sub(prevEarth));
+    controls.target.copy(earthAxis.position);
+  }
+  controls.update();
+
+  dayEl.textContent = Math.floor(((t % T_YEAR) + T_YEAR) % T_YEAR);
+  distEl.textContent = (p.r * AU_KM / 1e6).toFixed(2) + ' Mio. km';
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
