@@ -2,95 +2,369 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Erde und Sonne – 3D</title>
 <style>
-  :root { --text:#e8ecf4; --muted:#8a93a8; --earth:#4f9cff; }
+  :root { --red:#ff5a5a; --text:#e8ecf4; --muted:#8a93a8; --accent:#4f9cff; --panel:#0c1020; --panel2:#121831; --line:#26304d; }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:#000; color:var(--text);
-    font-family:"Avenir Next","Segoe UI",system-ui,sans-serif; overflow:hidden; }
-  canvas { display:block; }
-  .panel { position:fixed; left:16px; bottom:16px; background:rgba(12,16,30,.82);
-    border:1px solid #2a3350; border-radius:10px; padding:12px 14px; font-size:14px; width:270px; }
-  .panel h1 { font-size:16px; margin:0 0 8px; font-weight:600; }
-  .row { display:flex; white-space:nowrap; justify-content:space-between; gap:12px; margin:3px 0; }
-  .row span:first-child { color:var(--muted); }
-  label { display:block; margin-top:10px; color:var(--muted); }
+    font-family:"Avenir Next","Segoe UI",system-ui,sans-serif; font-size:14px; }
+  body { padding-top:env(safe-area-inset-top, 0px); padding-bottom:env(safe-area-inset-bottom, 0px); }
+  .app { display:grid; height:100%; grid-template-columns:minmax(0,1fr) 340px; grid-template-rows:minmax(0,1fr) 390px; }
+  #main { grid-column:1; grid-row:1; position:relative; overflow:hidden; background:#000; }
+  #main canvas { display:block; }
+  #data { grid-column:1; grid-row:2; background:var(--panel); border-top:1px solid var(--line);
+    display:grid; grid-template-columns:minmax(0,1fr) auto; grid-auto-rows:max-content; gap:14px 18px; align-content:start; padding:12px 14px; overflow:auto; }
+  #input { grid-column:2; grid-row:1 / span 2; background:var(--panel); border-left:1px solid var(--line);
+    padding:12px 14px; overflow:auto; }
+  h2 { font-size:15px; font-weight:600; margin:0 0 8px; }
+  h3 { font-size:13px; font-weight:600; color:var(--muted); margin:14px 0 6px; }
+  .hint { position:absolute; left:12px; bottom:10px; color:var(--muted); font-size:12px; pointer-events:none; }
+  .seg { display:flex; border:1px solid #3a4568; border-radius:7px; overflow:hidden; }
+  .seg button { flex:1; border:0; border-right:1px solid #3a4568; border-radius:0; }
+  .seg button:last-child { border-right:0; }
+  button { padding:7px 6px; border-radius:6px; border:1px solid #3a4568; background:#1a2240;
+    color:var(--text); font:inherit; cursor:pointer; }
+  button[aria-pressed="true"] { background:#2f4f8f; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  input[type=date], input[type=time], select { padding:6px; border-radius:6px; border:1px solid #3a4568;
+    background:#1a2240; color:var(--text); font:inherit; color-scheme:dark; }
+  select { width:100%; }
   input[type=range] { width:100%; }
-  .buttons { display:flex; gap:8px; margin-top:10px; }
-  button { flex:1; padding:7px; border-radius:6px; border:1px solid #3a4568;
-    background:#1a2240; color:var(--text); font:inherit; cursor:pointer; }
-  button:focus-visible, input:focus-visible { outline:2px solid var(--earth); outline-offset:2px; }
-  .hint { position:fixed; right:16px; bottom:16px; color:var(--muted); font-size:12px; }
+  .player { display:grid; grid-template-columns:1fr 1.3fr 1fr 1.3fr; gap:6px; }
+  .player button { font-size:18px; padding:6px; }
+  .player #nowBtn { font-size:14px; }
+  .speedin { display:grid; grid-template-columns:1fr 70px auto; gap:6px; align-items:center; margin-top:6px; }
+  .speedin input { padding:6px; border-radius:6px; border:1px solid #3a4568; background:#1a2240; color:var(--text); font:inherit; width:100%; }
+  .speedin span { color:var(--muted); font-size:13px; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .row { display:flex; justify-content:space-between; gap:12px; margin:3px 0; }
+  .row span:first-child { color:var(--muted); }
+  .check { display:flex; align-items:center; gap:8px; margin:3px 0; cursor:pointer; }
+  .check input { accent-color:var(--accent); width:16px; height:16px; flex:none; }
+  .check.disabled { opacity:.45; cursor:not-allowed; }
+  .dot { width:10px; height:10px; border-radius:50%; flex:none; background:transparent; }
+  .lat { margin-left:auto; color:var(--muted); font-size:12px; white-space:nowrap; }
+  .note { color:var(--muted); font-size:12px; margin:4px 0; }
+  .hidden { display:none !important; }
+  /* Lernmodus: nur Sonne/Erde/Mond mit Infokästen, Simulation per Häkchen */
+  body.intro .app { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); }
+  body.intro #data, body.intro #input, body.intro #mapBox, body.intro #curveBox { display:none !important; }
+  body:not(.intro) #infoBoxes, body:not(.intro) .learnOnly { display:none !important; }
+  .learn { position:absolute; left:10px; top:10px; background:rgba(12,16,32,.88); border:1px solid var(--line);
+    border-radius:8px; padding:8px 12px; display:flex; gap:16px; font-size:15px; }
+  #input .learn { position:static; background:var(--panel2); margin-bottom:10px; }
+  .infoboxes { position:absolute; right:10px; top:10px; bottom:40px; width:356px; overflow:auto; display:flex; flex-direction:column; gap:10px; }
+  .info { background:rgba(12,16,32,.88); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13.5px; }
+  .info h2 { font-size:16px; margin:0 0 6px; }
+  .info .row { margin:3px 0; }
+  .info .row span:last-child { text-align:right; }
+  .info .mass { margin:4px 0; }
+  .info .mass span { display:block; color:var(--muted); }
+  .info .mass b { display:block; font-weight:600; font-size:13.5px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .info .mass i { display:block; color:var(--muted); font-size:12px; font-style:normal; }
+  .info .rel { color:#ffd36b; font-size:12.5px; margin:6px 0 0; line-height:1.45; }
+  .info .src { color:var(--muted); font-size:11px; margin-top:6px; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:20; display:flex; align-items:center; justify-content:center; padding:16px; }
+  .modalbox { background:#05070f; border:1px solid var(--line); border-radius:10px; padding:16px; max-width:1100px; width:100%; max-height:100%; overflow:auto; }
+  .modalhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .modalbox svg { display:block; max-width:none; }
+  .svgscroll { overflow-x:auto; }
+  .modalbox p { color:var(--muted); line-height:1.5; margin:6px 0; }
+  #ptable th[colspan] { text-align:center; }
+  td.moon { display:flex; align-items:center; gap:6px; }
+  td.moon canvas { display:block; }
+  .phase { font-weight:700; width:1.2em; text-align:center; }
+  td.invisible { color:var(--red) !important; background:rgba(255,90,90,.08); }
+  details summary { cursor:pointer; color:var(--text); margin:6px 0; }
+  /* Datenfenster */
+  .tablewrap { flex:1 1 auto; min-width:0; overflow:auto; }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  th, td { text-align:left; padding:5px 6px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  td canvas { display:block; }
+  .minimap { position:absolute; left:10px; top:10px; max-height:calc(100% - 20px); overflow:auto; background:rgba(12,16,32,.82); border:1px solid var(--line);
+    border-radius:8px; padding:6px 8px; }
+  .curvebox { left:auto; right:10px; top:10px; width:336px; }
+  .curvebox:empty { display:none; }
+  .boxhead { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px; }
+  button.mini { padding:0 8px; font-size:16px; line-height:22px; border-radius:5px; }
+  .curvebox.collapsed { width:auto; }
+  .maptitle { font-size:12px; font-weight:600; margin-bottom:4px; }
+  .curves { min-width:380px; }
+  .curve { display:block; margin:2px 0 4px; }
+  .minimap canvas { display:block; border:1px solid var(--line); border-radius:6px; }
+  .sunline { color:var(--muted); font-size:12px; margin:6px 0 0; }
   #msg { position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-    text-align:center; padding:24px; font-size:16px; line-height:1.5; }
+    text-align:center; padding:24px; font-size:16px; line-height:1.5; background:#000; z-index:10; }
+  @media (max-width: 860px) {
+    html, body { height:auto; }
+    .app { display:block; }
+    #main { height:60vh; }
+    .minimap canvas { width:240px !important; height:120px !important; }
+    .curvebox { width:auto; left:10px; }
+    .curves { min-width:0; }
+    #input, #data { border:0; border-top:1px solid var(--line); }
+    #data { grid-template-columns:minmax(0,1fr); } #data .tablewrap { grid-column:auto !important; }
+    .tablewrap { min-width:0; }
+  }
 </style>
 <script type="importmap">
   { "imports": { "three": "./lib/three-0.186.1.bundle.min.js" } }
 </script>
 </head>
-<body>
+<body class="intro">
 <div id="msg"></div>
-<div class="panel">
-  <h1>Erde und Sonne</h1>
-  <div class="row"><span>Tag im Jahr</span><span id="day">0</span></div>
-  <div class="row"><span>Abstand zur Sonne</span><span id="dist">–</span></div>
-  <label for="speed">Zeitraffer: <span id="speedVal"></span></label>
-  <input id="speed" type="range" min="0" max="100" value="35">
-  <div class="buttons">
-    <button id="pause">Pause</button>
-    <button id="follow">Zur Erde</button>
+<div class="app">
+  <section id="main" aria-label="Hauptdarstellung">
+    <div class="hint" id="hint">Ziehen: drehen · Scrollen: zoomen</div>
+    <div class="learn" id="learn">
+      <label class="check learnOnly"><input type="checkbox" id="lSun" checked> Sonne</label>
+      <label class="check learnOnly"><input type="checkbox" id="lEM"> Erde und Mond</label>
+      <label class="check"><input type="checkbox" id="lSim"> Simulation</label>
+    </div>
+    <div class="infoboxes" id="infoBoxes">
+      <div class="info" id="infoSun"></div>
+      <div class="info hidden" id="infoEarth"></div>
+      <div class="info hidden" id="infoMoon"></div>
+      <div class="info hidden" id="infoDist"></div>
+    </div>
+    <div class="minimap" id="mapBox">
+      <div class="maptitle">Tag und Nacht auf der Erde</div>
+      <canvas id="map" width="920" height="460" style="width:460px;height:230px"></canvas>
+      <div class="note" style="margin:2px 0 0">☀ Sonne steht senkrecht · Punkte: gewählte Städte</div>
+    </div>
+    <div class="minimap curvebox" id="curveBox">
+      <div class="boxhead">
+        <div class="maptitle" style="margin:0">Sonne und Mond über den Tag</div>
+        <button id="curveToggle" class="mini" aria-expanded="true" title="Diagramme ein-/ausblenden">−</button>
+      </div>
+      <div id="curveList"></div>
+      <div class="note" id="curveNote" style="margin:0"><span style="color:#f2c94c">━ Sonne</span> · <span style="color:#c9d1e6">━ Mond</span> · Mittellinie = Horizont · Kreis = Mondphase, wie sie dort am Himmel steht</div>
+    </div>
+  </section>
+
+  <section id="data" aria-label="Datenfenster">
+    <div class="tablewrap" style="grid-column:1 / span 2">
+      <h2>Sonne und Mond</h2>
+      <table>
+        <thead><tr><th>Stadt</th><th>Ortszeit</th><th>Jahreszeit</th><th>Sonnen&shy;aufgang</th><th>Sonnen&shy;untergang</th><th>Tageslänge</th><th>Nachtlänge</th><th>Sonnenhöhe</th><th>Tag/Nacht 0–24 h</th><th>Mond</th><th>Mond&shy;aufgang</th><th>Mond&shy;untergang</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <p class="sunline" id="sunline"></p>
+      <p class="sunline" id="seasonline"></p>
+    </div>
+    <div class="tablewrap" style="grid-column:1 / span 2">
+      <h2 style="display:flex;align-items:center;gap:12px">Planeten (Ortszeit der jeweiligen Stadt)
+        <label class="check" style="font-size:13px;font-weight:400;margin:0"><input type="checkbox" id="showPlanets"> anzeigen</label></h2>
+      <div id="planetBox" class="hidden">
+        <div id="planetChecks" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin:2px 0 6px"></div>
+        <table id="ptable"><thead id="phead"></thead><tbody id="pbody"></tbody></table>
+        <p class="note">Auf- und Untergang am aktuellen Kalendertag der Stadt; Höhe = jetzt über dem Horizont. „–“: an diesem Tag kein Auf- bzw. Untergang.<br>
+        <span style="color:var(--red)">Rot</span>: in der Nacht um diesen Tag (Sonne mehr als 6° unter dem Horizont) nie über dem Horizont, also nicht sichtbar.</p>
+      </div>
+    </div>
+
+  </section>
+
+  <section id="input" aria-label="Eingabe">
+    <h2>Eingabe</h2>
+
+    <h3>Datum und Uhrzeit (Berlin)</h3>
+    <div class="two">
+      <input type="date" id="dateIn" aria-label="Datum">
+      <input type="time" id="timeIn" aria-label="Uhrzeit in Berlin">
+    </div>
+    <div class="two" style="margin-top:8px">
+      <button id="nowBtn">Jetzt</button>
+      <button id="playBtn">Pause</button>
+    </div>
+    <h3>Geschwindigkeit: <span id="speedVal"></span></h3>
+    <input id="speed" type="range" min="0" max="1000" step="1" aria-label="Geschwindigkeit">
+    <div class="speedin">
+      <input type="number" id="speedNum" min="0" step="any" aria-label="Geschwindigkeit eingeben">
+      <select id="speedUnit" aria-label="Einheit"><option value="1">s</option><option value="60">min</option><option value="3600">h</option></select>
+      <span>pro Sekunde</span>
+    </div>
+    <p class="note">Simulierte Zeit pro echter Sekunde, von 1 s (Echtzeit) bis 12 h.</p>
+    <h3>Tageweise springen: <span id="monthVal">±0</span></h3>
+    <input id="month" type="range" min="-1826" max="1826" step="1" value="0" aria-label="Tage vor oder zurück">
+    <div class="row" style="font-size:12px"><span>−5 Jahre</span><span>Anfangsdatum</span><span>+5 Jahre</span></div>
+    <button id="scaleBtn" style="width:100%;margin-top:12px">Echte Größenverhältnisse</button>
+
+    <h3>Ansicht</h3>
+    <div class="seg" role="group" aria-label="Ansicht">
+      <button data-view="system" aria-pressed="true">Sonnensystem</button>
+      <button data-view="earth" aria-pressed="false">Erde</button>
+      <button data-view="sat" aria-pressed="false">Satellit</button>
+    </div>
+    <div id="satGroup" class="hidden">
+      <h3>Geostationärer Satellit</h3>
+      <label class="check"><input type="checkbox" id="showSats" checked> Satelliten und GEO-Bahn anzeigen</label>
+      <select id="satSel" aria-label="Geostationärer Satellit"></select>
+      <div class="row"><span>Position</span><span id="satPos">–</span></div>
+      <div class="row"><span>Höhe über dem Äquator</span><span>35 786 km</span></div>
+    </div>
+
+    <h3>Erdoberfläche</h3>
+    <div class="seg" role="group" aria-label="Erdoberfläche">
+      <button data-tex="nature" aria-pressed="true">Natur</button>
+      <button data-tex="countries" aria-pressed="false">Länder</button>
+    </div>
+
+    <h3>Ebenen</h3>
+    <label class="check"><input type="checkbox" id="showEcl"> Ekliptik (blau)</label>
+    <label class="check"><input type="checkbox" id="showEqu"> Äquatorebene (orange)</label>
+    <p class="note">Sind beide an, wird die Schnittlinie zum Frühlingspunkt ♈︎ gezeigt.</p>
+
+    <h3>Koordinatensysteme in der Sonne</h3>
+    <label class="check"><input type="checkbox" id="csFixed"> Sonnenfest, X zum Frühlingspunkt ♈︎</label>
+    <label class="check"><input type="checkbox" id="csRot"> Mitdrehend, x' zur Erde</label>
+
+    <h3>Städte (bis zu 3 auswählen)</h3>
+    <label class="check"><input type="checkbox" id="showCities"> Städteliste anzeigen</label>
+    <div id="cityList" class="hidden"></div>
+    <p class="note">Koordinaten: Natural Earth. Sydney ist Hauptstadt von New South Wales, nicht von Australien.</p>
+  </section>
+</div>
+
+<div id="scaleModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="scaleTitle">
+  <div class="modalbox">
+    <div class="modalhead"><h2 id="scaleTitle">Echte Größenverhältnisse</h2><button id="closeScale">Schließen</button></div>
+    <div id="scaleSvg"></div>
   </div>
 </div>
-<div class="hint">Ziehen: drehen · Scrollen: zoomen</div>
 
 <script>
-  // Hinweis, falls die Datei per Doppelklick geöffnet wird
   if (location.protocol === 'file:') {
     const m = document.getElementById('msg');
     m.style.display = 'flex';
-    m.textContent = 'Diese Simulation muss über den Web-Link (github.io) geöffnet werden, nicht per Doppelklick.';
+    m.textContent = 'Diese Simulation muss über den Web-Link geöffnet werden, nicht per Doppelklick.';
   }
 </script>
-
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three';
 
-// ---------- Physikalische Daten (echte Werte) ----------
-const T_YEAR = 365.256;           // Umlaufzeit in Tagen
-const T_DAY  = 0.99727;           // Sterntag in Tagen (eine Drehung um die eigene Achse)
-const ECC    = 0.0167;            // Exzentrizität der Erdbahn
-const TILT   = THREE.MathUtils.degToRad(23.44); // Achsneigung
+// ---------- Physikalische Daten ----------
+const ECC    = 0.0167;             // Exzentrizität der Erdbahn
+const TILT   = THREE.MathUtils.degToRad(23.44);
 const AU_KM  = 149597870.7;
+const R_EARTH_KM = 6378.137, R_GEO_KM = 42164;   // Erdradius und geostationärer Bahnradius
+const PERI_LON = 102.94719;        // ekliptikale Länge des Perihels (NASA, J2000)
+const DEG = Math.PI / 180;
 
-// ---------- Darstellungsmaßstab (NICHT maßstabsgetreu) ----------
-const ORBIT = 40;    // Bahnradius in Szeneneinheiten
-const R_SUN = 5;
-const R_EARTH = 1.2;
+// Echte Satelliten (Wettersatelliten), Länge in Grad, Ost positiv
+const SATS = [
+  { name: 'GOES-19 (GOES-East)', region: 'Amerika Ost',          lon: -75.2 },
+  { name: 'GOES-18 (GOES-West)', region: 'Amerika West/Pazifik', lon: -137.0 },
+  { name: 'Meteosat-12',          region: 'Europa/Afrika',        lon: 0 },
+  { name: 'INSAT-3DS',            region: 'Asien (Indien)',       lon: 82.0 },
+  { name: 'Himawari-9',           region: 'Asien (Ostasien)',     lon: 140.7 },
+];
+
+// Städte: Koordinaten aus Natural Earth (populated places), Zeitzone nach IANA
+const CITIES = [
+  // Amerika
+  { n: 'Nuuk',            r: 'Amerika', lat: 64.20,  lon: -51.73, tz: 'America/Nuuk' },
+  { n: 'Washington, D.C.',r: 'Amerika', lat: 38.90,  lon: -77.01, tz: 'America/New_York' },
+  { n: 'Mexiko-Stadt',    r: 'Amerika', lat: 19.44,  lon: -99.13, tz: 'America/Mexico_City' },
+  { n: 'Quito',           r: 'Amerika', lat: -0.21,  lon: -78.50, tz: 'America/Guayaquil', eq: true },
+  { n: 'Brasília',        r: 'Amerika', lat: -15.78, lon: -47.92, tz: 'America/Sao_Paulo' },
+  { n: 'Buenos Aires',    r: 'Amerika', lat: -34.60, lon: -58.40, tz: 'America/Argentina/Buenos_Aires' },
+  // Europa/Afrika
+  { n: 'Reykjavík',       r: 'Europa/Afrika', lat: 64.15, lon: -21.95, tz: 'Atlantic/Reykjavik' },
+  { n: 'Berlin',          r: 'Europa/Afrika', lat: 52.52, lon: 13.40,  tz: 'Europe/Berlin' },
+  { n: 'Kairo',           r: 'Europa/Afrika', lat: 30.05, lon: 31.25,  tz: 'Africa/Cairo' },
+  { n: 'Kampala',         r: 'Europa/Afrika', lat: 0.32,  lon: 32.58,  tz: 'Africa/Kampala', eq: true },
+  { n: 'Pretoria',        r: 'Europa/Afrika', lat: -25.70, lon: 28.23, tz: 'Africa/Johannesburg' },
+  { n: 'Kapstadt',        r: 'Europa/Afrika', lat: -33.92, lon: 18.43, tz: 'Africa/Johannesburg' },
+  // Asien/Ozeanien
+  { n: 'Astana',          r: 'Asien/Ozeanien', lat: 51.18, lon: 71.43,  tz: 'Asia/Almaty' },
+  { n: 'Ulaanbaatar',     r: 'Asien/Ozeanien', lat: 47.92, lon: 106.91, tz: 'Asia/Ulaanbaatar' },
+  { n: 'Peking',          r: 'Asien/Ozeanien', lat: 39.93, lon: 116.39, tz: 'Asia/Shanghai' },
+  { n: 'Seoul',           r: 'Asien/Ozeanien', lat: 37.57, lon: 127.00, tz: 'Asia/Seoul' },
+  { n: 'Tokio',           r: 'Asien/Ozeanien', lat: 35.69, lon: 139.75, tz: 'Asia/Tokyo' },
+  { n: 'Teheran',         r: 'Asien/Ozeanien', lat: 35.67, lon: 51.42,  tz: 'Asia/Tehran' },
+  { n: 'Neu-Delhi',       r: 'Asien/Ozeanien', lat: 28.60, lon: 77.20,  tz: 'Asia/Kolkata' },
+  { n: 'Riad',            r: 'Asien/Ozeanien', lat: 24.64, lon: 46.77,  tz: 'Asia/Riyadh' },
+  { n: 'Dhaka',           r: 'Asien/Ozeanien', lat: 23.73, lon: 90.41,  tz: 'Asia/Dhaka' },
+  { n: 'Manila',          r: 'Asien/Ozeanien', lat: 14.61, lon: 120.98, tz: 'Asia/Manila' },
+  { n: 'Bangkok',         r: 'Asien/Ozeanien', lat: 13.75, lon: 100.51, tz: 'Asia/Bangkok' },
+  { n: 'Kuala Lumpur',    r: 'Asien/Ozeanien', lat: 3.17,  lon: 101.70, tz: 'Asia/Kuala_Lumpur', eq: true },
+  { n: 'Singapur',        r: 'Asien/Ozeanien', lat: 1.29,  lon: 103.85, tz: 'Asia/Singapore', eq: true },
+  { n: 'Jakarta',         r: 'Asien/Ozeanien', lat: -6.17, lon: 106.83, tz: 'Asia/Jakarta', eq: true },
+  { n: 'Port Moresby',    r: 'Asien/Ozeanien', lat: -9.46, lon: 147.19, tz: 'Pacific/Port_Moresby' },
+  { n: 'Sydney',          r: 'Asien/Ozeanien', lat: -33.92, lon: 151.18, tz: 'Australia/Sydney' },
+  { n: 'Canberra',        r: 'Asien/Ozeanien', lat: -35.28, lon: 149.13, tz: 'Australia/Sydney' },
+  { n: 'Wellington',      r: 'Asien/Ozeanien', lat: -41.30, lon: 174.78, tz: 'Pacific/Auckland' },
+];
+const SLOT_COLORS = ['#ff6b6b', '#4fd1c5', '#f6c445'];
+
+// ---------- Darstellungsmaßstab ----------
+// Sonne, Erde und Bahn sind NICHT im selben Maßstab (sonst wäre die Erde unsichtbar).
+// Erde und geostationäre Bahn sind untereinander maßstabsgetreu.
+// Erde, Mond, Satelliten und alle Abstände sind maßstabsgetreu (1 Erdradius = 2,4 Einheiten).
+// Alles um die Sonne (Sonne, Erdbahn, Koordinatensysteme) liegt in der Gruppe „helio“, die
+// in einem Hilfsmaßstab gebaut (Bahnradius 40) und dann auf die echte Größe skaliert wird.
+const R_EARTH = 2.4;
+const R_GEO = R_EARTH * R_GEO_KM / R_EARTH_KM;
+const ER_PER_AU = AU_KM / R_EARTH_KM;            // ≈ 23 455 Erdradien pro AE
+const ORBIT = 40;                                // Bahnradius in der Hilfseinheit von „helio“
+const ORBIT_REAL = R_EARTH * ER_PER_AU;          // echter Bahnradius in Szeneneinheiten (≈ 56 300)
+const HF = ORBIT_REAL / ORBIT;                   // Skalierung der Gruppe „helio“
+const R_SUN = R_EARTH * 695700 / 6371 / HF;      // echter Sonnenradius in der Hilfseinheit
 
 // ---------- Grundgerüst ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const mainEl = document.getElementById('main');
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });  // große Entfernungsunterschiede
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-document.body.prepend(renderer.domElement);
+mainEl.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 2000);
-camera.position.set(0, 45, 75);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 8e6);
 const controls = new OrbitControls(camera, renderer.domElement);
+// Die Erde bleibt im Ursprung; die Sonne und alles Heliozentrische wird relativ dazu verschoben.
+const helio = new THREE.Group();
+helio.scale.setScalar(HF);
+scene.add(helio);
 controls.enableDamping = true;
 
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
+function fit() {
+  const w = mainEl.clientWidth, h = mainEl.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(fit).observe(mainEl);
+fit();
+
+// Richtung in der Ekliptik zur ekliptikalen Länge lonDeg (0° = Frühlingspunkt).
+// Szene: Perihel liegt auf +x, die Erde läuft von +x Richtung –z, „oben“ = Ekliptik-Nordpol (+y).
+function eclDir(lonDeg) {
+  const a = THREE.MathUtils.degToRad(lonDeg - PERI_LON);
+  return new THREE.Vector3(Math.cos(a), 0, -Math.sin(a));
+}
+// Textschild, das immer zur Kamera zeigt
+function makeLabel(text, color = '#ffffff', h = 1.2) {
+  const c = document.createElement('canvas'), x = c.getContext('2d');
+  const font = '600 64px "Avenir Next","Segoe UI",system-ui,sans-serif';
+  x.font = font; const w = Math.ceil(x.measureText(text).width) + 24;
+  c.width = w; c.height = 96;
+  x.font = font; x.textBaseline = 'middle';
+  x.lineWidth = 8; x.strokeStyle = 'rgba(0,0,0,0.75)'; x.strokeText(text, 12, 50);
+  x.fillStyle = color; x.fillText(text, 12, 50);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, transparent: true }));
+  s.scale.set(h * w / 96, h, 1);
+  s.userData.aspect = w / 96; s.userData.base = h;
+  s.renderOrder = 10;
+  return s;
+}
 
 // ---------- Sterne ----------
 {
   const pos = [];
   for (let i = 0; i < 3000; i++) {
-    const v = new THREE.Vector3().randomDirection().multiplyScalar(600 + Math.random() * 300);
+    const v = new THREE.Vector3().randomDirection().multiplyScalar(3e6 + Math.random() * 1e6);
     pos.push(v.x, v.y, v.z);
   }
   const g = new THREE.BufferGeometry();
@@ -99,50 +373,41 @@ addEventListener('resize', () => {
 }
 
 // ---------- Sonne ----------
-const sun = new THREE.Mesh(
-  new THREE.SphereGeometry(R_SUN, 64, 32),
-  new THREE.MeshBasicMaterial({ color: 0xffd27a })
-);
-scene.add(sun);
-
-// Leuchten um die Sonne (Gradient als Sprite)
+const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), new THREE.MeshBasicMaterial({ color: 0xffd27a }));
+helio.add(sunMesh);
+let sunGlow;
 {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const x = c.getContext('2d');
   const g = x.createRadialGradient(128, 128, 0, 128, 128, 128);
-  g.addColorStop(0, 'rgba(255,230,160,1)');
-  g.addColorStop(0.25, 'rgba(255,190,80,0.6)');
-  g.addColorStop(1, 'rgba(255,140,30,0)');
+  g.addColorStop(0, 'rgba(255,230,160,1)'); g.addColorStop(0.25, 'rgba(255,190,80,0.6)'); g.addColorStop(1, 'rgba(255,140,30,0)');
   x.fillStyle = g; x.fillRect(0, 0, 256, 256);
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(c), blending: THREE.AdditiveBlending, depthWrite: false
-  }));
-  glow.scale.set(R_SUN * 6, R_SUN * 6, 1);
-  scene.add(glow);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), blending: THREE.AdditiveBlending, depthWrite: false }));
+  helio.add(glow); sunGlow = glow;
 }
-
-// Licht geht von der Sonne aus
-const sunLight = new THREE.PointLight(0xffffff, 4, 0, 0);
-scene.add(sunLight);
-scene.add(new THREE.AmbientLight(0xffffff, 0.04));
+helio.add(new THREE.PointLight(0xffffff, 4, 0, 0));
+scene.add(new THREE.AmbientLight(0xffffff, 0.05));
 
 // ---------- Erde ----------
 const loader = new THREE.TextureLoader();
-const dayMap = loader.load('./textures/earth_day_4096.jpg');
-dayMap.colorSpace = THREE.SRGBColorSpace;
-dayMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
-const cloudMap = loader.load('./textures/earth_clouds_1024.png');
-cloudMap.colorSpace = THREE.SRGBColorSpace;
+function tex(src, srgb = true) {
+  const t = loader.load(src);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+const textures = { nature: tex('./textures/earth_day_4096.jpg'), countries: tex('./textures/earth_political_4096.png') };
+const cloudMap = tex('./textures/earth_clouds_1024.png');
 
-// earthAxis trägt die feste Achsneigung, earth dreht sich darin um die eigene Achse
+// earthAxis: feste Achsneigung (Nordpol im Perihel von der Sonne weg) – earth: Drehung um die eigene Achse
 const earthAxis = new THREE.Group();
-earthAxis.rotation.z = TILT;
+// Nordpol neigt sich Richtung ekliptikale Länge 90° (Juni-Sonnenwende: Nordhalbkugel zur Sonne)
+const POLE = eclDir(90).multiplyScalar(Math.sin(TILT)).add(new THREE.Vector3(0, Math.cos(TILT), 0)).normalize();
+earthAxis.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), POLE);
 scene.add(earthAxis);
 
-const earth = new THREE.Mesh(
-  new THREE.SphereGeometry(R_EARTH, 96, 48),
-  new THREE.MeshStandardMaterial({ map: dayMap, roughness: 0.9, metalness: 0 })
-);
+const earthMat = new THREE.MeshStandardMaterial({ map: textures.nature, roughness: 0.9, metalness: 0 });
+const earth = new THREE.Mesh(new THREE.SphereGeometry(R_EARTH, 128, 64), earthMat);
 earthAxis.add(earth);
 
 const clouds = new THREE.Mesh(
@@ -151,84 +416,1164 @@ const clouds = new THREE.Mesh(
 );
 earthAxis.add(clouds);
 
-// Erdachse als dünne Linie (zeigt immer in dieselbe Richtung im Raum)
+// Erdachse mit roter Spitze am Nordpol
 {
-  const g = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, -R_EARTH * 1.6, 0), new THREE.Vector3(0, R_EARTH * 1.6, 0)
-  ]);
-  earthAxis.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x9fb4ff, transparent: true, opacity: 0.6 })));
+  const len = R_EARTH * 3.4;
+  earthAxis.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len, 10), new THREE.MeshBasicMaterial({ color: 0xc9d6ff })));
+  const north = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 16), new THREE.MeshBasicMaterial({ color: 0xff5a4f }));
+  north.position.y = len / 2 + 0.15;
+  earthAxis.add(north);
 }
 
-// ---------- Kepler-Bahn ----------
-function orbitPos(tDays) {
-  const M = 2 * Math.PI * (((tDays % T_YEAR) + T_YEAR) % T_YEAR) / T_YEAR;
-  let E = M;
-  for (let i = 0; i < 6; i++) E -= (E - ECC * Math.sin(E) - M) / (1 - ECC * Math.cos(E));
-  return {
-    x: ORBIT * (Math.cos(E) - ECC),
-    z: -ORBIT * Math.sqrt(1 - ECC * ECC) * Math.sin(E),
-    r: 1 - ECC * Math.cos(E)          // Abstand in AE
-  };
+// ---------- Bahnachse (senkrecht zur Erdbahn) mit Winkel zur Erdachse ----------
+const orbitAxis = new THREE.Group();
+const axisArc = new THREE.Group();           // Winkelbogen zwischen Bahnachse und Erdachse          // wird nicht geneigt, nur mit der Erde verschoben
+scene.add(orbitAxis);
+{
+  const len = R_EARTH * 3.4, col = 0xffa53a;
+  orbitAxis.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len, 10), new THREE.MeshBasicMaterial({ color: col })));
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 16), new THREE.MeshBasicMaterial({ color: col }));
+  tip.position.y = len / 2 + 0.15; orbitAxis.add(tip);
+  // Bogen von der Bahnachse zur Erdachse
+  const h = eclDir(90), r = R_EARTH * 1.55, pts = [];
+  for (let i = 0; i <= 32; i++) {
+    const th = TILT * i / 32;
+    pts.push(new THREE.Vector3(0, Math.cos(th), 0).addScaledVector(h, Math.sin(th)).multiplyScalar(r));
+  }
+  orbitAxis.add(axisArc);
+  axisArc.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 64, 0.02, 6, false),
+    new THREE.MeshBasicMaterial({ color: 0xffe08a })));
+  const lab = makeLabel('23,44°', '#ffe08a', 0.45);
+  lab.position.copy(new THREE.Vector3(0, Math.cos(TILT / 2), 0).addScaledVector(h, Math.sin(TILT / 2)).multiplyScalar(r * 1.25));
+  axisArc.add(lab);
 }
+
+// ---------- Geostationäre Bahn und Satelliten ----------
+const geoRing = new THREE.Mesh(
+  new THREE.TorusGeometry(R_GEO, 0.02, 6, 256),
+  new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.7 })
+);
+geoRing.rotation.x = Math.PI / 2;          // in die Äquatorebene legen
+earthAxis.add(geoRing);
+
+// Die Satelliten hängen an der sich drehenden Erde -> bleiben immer über demselben Punkt
+const satPivot = new THREE.Group();          // fasst alle Satelliten zusammen
+earth.add(satPivot);
+function makeSat() {
+  const sat = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), new THREE.MeshStandardMaterial({ color: 0xd8d8d8, metalness: 0.6, roughness: 0.4 }));
+  const panelMat = new THREE.MeshStandardMaterial({ color: 0x2a4fa8, metalness: 0.3, roughness: 0.5 });
+  const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.7, 0.18), panelMat); p1.position.y = 0.48;
+  const p2 = p1.clone(); p2.position.y = -0.48;
+  const dish = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.08, 16, 1, true), new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
+  dish.rotation.z = Math.PI / 2; dish.position.x = -0.15;   // Antenne zeigt zur Erde
+  sat.add(body, p1, p2, dish);
+  return sat;
+}
+// Länge λ: Greenwich liegt bei lokaler +x-Richtung, Osten bei –z
+const satObjs = SATS.map(d => {
+  const holder = new THREE.Group();
+  holder.rotation.y = THREE.MathUtils.degToRad(d.lon);
+  const sat = makeSat(); sat.position.x = R_GEO;
+  const lab = makeLabel(d.name, '#ffffff', 0.45); lab.position.set(R_GEO, 0.8, 0);
+  holder.add(sat, lab);
+  satPivot.add(holder);
+  return { sat, lab };
+});
+
+// ---------- Erdbahn (echte Form) ----------
+let orbitTube;
 {
   const pts = [];
-  for (let k = 0; k <= 256; k++) { const p = orbitPos(T_YEAR * k / 256); pts.push(new THREE.Vector3(p.x, 0, p.z)); }
-  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
-    new THREE.LineBasicMaterial({ color: 0x5a6788, transparent: true, opacity: 0.5 })));
+  for (let k = 0; k < 256; k++) {
+    const E = 2 * Math.PI * k / 256;
+    pts.push(new THREE.Vector3(ORBIT * (Math.cos(E) - ECC), 0, -ORBIT * Math.sqrt(1 - ECC * ECC) * Math.sin(E)));
+  }
+  // Röhre statt Linie: WebGL-Linien sind immer nur 1 Pixel breit
+  orbitTube = new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 512, 0.15, 8, true),
+    new THREE.MeshBasicMaterial({ color: 0x7f8fb8, transparent: true, opacity: 0.7 })
+  );
+  helio.add(orbitTube);
 }
 
-// ---------- Steuerung ----------
-const dayEl = document.getElementById('day'), distEl = document.getElementById('dist');
-const speedEl = document.getElementById('speed'), speedVal = document.getElementById('speedVal');
-const pauseBtn = document.getElementById('pause'), followBtn = document.getElementById('follow');
-
-// Regler logarithmisch: 0,02 bis 60 Tage pro Sekunde
-const speed = () => 0.02 * Math.pow(3000, speedEl.value / 100);
-function showSpeed() {
-  const s = speed();
-  speedVal.textContent = s < 1 ? `${(s * 24).toFixed(1)} Std./s` : `${s.toFixed(1)} Tage/s`;
+// ---------- Kartesische Koordinatensysteme in der Sonne ----------
+// lokale Achsen: x = (1,0,0), y = oben × x = (0,0,–1), z = oben (Ekliptik-Nordpol)
+function makeFrame(names, colors, L) {
+  const g = new THREE.Group();
+  const dirs = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0)];
+  dirs.forEach((d, i) => {
+    // dicker Pfeil aus Zylinder und Kegel (WebGL-Linien wären nur 1 Pixel breit)
+    const mat = new THREE.MeshBasicMaterial({ color: colors[i] });
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, L - 1.4, 10), mat);
+    shaft.position.y = (L - 1.4) / 2;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.4, 16), mat);
+    head.position.y = L - 0.7;
+    const a = new THREE.Group(); a.add(shaft, head);
+    a.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
+    g.add(a);
+    const lab = makeLabel(names[i], '#' + colors[i].toString(16).padStart(6, '0'), 2.0);
+    lab.position.copy(d).multiplyScalar(L + 1.6);
+    if (i === 0 && names[0].length > 3) lab.center.set(-0.05, 0.5);   // Text beginnt hinter der Pfeilspitze
+    g.add(lab);
+  });
+  return g;
 }
-speedEl.addEventListener('input', showSpeed);
-if (matchMedia('(prefers-reduced-motion: reduce)').matches) speedEl.value = 20;
+const yawOf = v => Math.atan2(-v.z, v.x);   // Drehwinkel um +y, der (1,0,0) auf v bringt
+
+const frameFixed = makeFrame(['X  Frühlingspunkt ♈︎', 'Y', 'Z'], [0xff5a4f, 0x5ad46a, 0x5a8cff], 16);
+frameFixed.rotation.y = yawOf(eclDir(0));
+{ // gestrichelte Linie weit hinaus zum Frühlingspunkt
+  const d = eclDir(0);
+  const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([d.clone().multiplyScalar(18), d.clone().multiplyScalar(36)]),
+    new THREE.LineDashedMaterial({ color: 0xff8a80, dashSize: 1.5, gapSize: 1 }));
+  ln.computeLineDistances();
+  const g = new THREE.Group(); g.add(ln);
+  helio.add(g); frameFixed.userData.extra = g;
+}
+const frameRot = makeFrame(["x'", "y'", "z'"], [0xffa53a, 0x4fd6e0, 0xc08cff], 12);
+helio.add(frameFixed, frameRot);
+
+
+// =====================================================================
+// Astronomie
+// Sonne + Sternzeit: USNO-Näherung (ca. 1 Bogenminute)
+// Mond + Planeten:   Paul Schlyter, "How to compute planetary positions" (1–2 Bogenminuten)
+// =====================================================================
+const JD = ms => ms / 86400000 + 2440587.5;
+const norm360 = a => ((a % 360) + 360) % 360;
+const wrap180 = a => ((norm360(a) + 180) % 360) - 180;
+const sind = a => Math.sin(a * DEG), cosd = a => Math.cos(a * DEG);
+const atan2d = (y, x) => Math.atan2(y, x) / DEG;
+
+function sunCoords(ms) {
+  const D = JD(ms) - 2451545.0;
+  const g = norm360(357.529 + 0.98560028 * D);
+  const q = norm360(280.459 + 0.98564736 * D);
+  const L = norm360(q + 1.915 * sind(g) + 0.020 * sind(2 * g));
+  const R = 1.00014 - 0.01671 * cosd(g) - 0.00014 * cosd(2 * g);
+  const e = 23.439 - 0.00000036 * D;
+  const RA = norm360(atan2d(cosd(e) * sind(L), cosd(L)));
+  const dec = Math.asin(sind(e) * sind(L)) / DEG;
+  const gmst = norm360((18.697375 + 24.065709824279 * D) * 15);
+  return { L, R, RA, dec, gmst, ecl: e };
+}
+const hourAngle = (gmst, RA, lon) => wrap180(gmst + lon - RA);
+function altitude(gmst, RA, dec, lat, lon) {
+  const H = hourAngle(gmst, RA, lon);
+  return Math.asin(sind(lat) * sind(dec) + cosd(lat) * cosd(dec) * cosd(H)) / DEG;
+}
+const sunElevation = (s, lat, lon) => altitude(s.gmst, s.RA, s.dec, lat, lon);
+
+// Kepler-Gleichung (Grad)
+function keplerE(M, e) {
+  let E = M + e / DEG * sind(M) * (1 + e * cosd(M));
+  for (let i = 0; i < 6; i++) E = E - (E - e / DEG * sind(E) - M) / (1 - e * cosd(E));
+  return E;
+}
+function orbitXYZ(N, i, w, a, e, M) {          // ekliptikal-rechtwinklig
+  const E = keplerE(M, e);
+  const xv = a * (cosd(E) - e), yv = a * Math.sqrt(1 - e * e) * sind(E);
+  const v = atan2d(yv, xv), r = Math.hypot(xv, yv);
+  return {
+    x: r * (cosd(N) * cosd(v + w) - sind(N) * sind(v + w) * cosd(i)),
+    y: r * (sind(N) * cosd(v + w) + cosd(N) * sind(v + w) * cosd(i)),
+    z: r * sind(v + w) * sind(i), r, M,
+  };
+}
+const dayNum = ms => JD(ms) - 2451543.5;        // Schlyter: Tag 0 = 2000 Jan 0.0 UT
+
+function sunSchlyter(d) {
+  const w = 282.9404 + 4.70935e-5 * d, e = 0.016709 - 1.151e-9 * d, M = norm360(356.0470 + 0.9856002585 * d);
+  const E = keplerE(M, e);
+  const xv = cosd(E) - e, yv = Math.sqrt(1 - e * e) * sind(E);
+  const lon = norm360(atan2d(yv, xv) + w), r = Math.hypot(xv, yv);
+  return { lon, r, M, w, x: r * cosd(lon), y: r * sind(lon) };
+}
+
+// Mond: geozentrisch-ekliptikal, Abstand in Erdradien
+function moonGeo(d) {
+  const N = norm360(125.1228 - 0.0529538083 * d), i = 5.1454, w = norm360(318.0634 + 0.1643573223 * d);
+  const a = 60.2666, e = 0.054900, M = norm360(115.3654 + 13.0649929509 * d);
+  const p = orbitXYZ(N, i, w, a, e, M);
+  let lon = atan2d(p.y, p.x), lat = atan2d(p.z, Math.hypot(p.x, p.y)), r = p.r;
+  const sun = sunSchlyter(d);
+  const Ms = sun.M, Mm = M, Ls = sun.M + sun.w, Lm = M + w + N, D = Lm - Ls, F = Lm - N;
+  lon += -1.274 * sind(Mm - 2 * D) + 0.658 * sind(2 * D) - 0.186 * sind(Ms) - 0.059 * sind(2 * Mm - 2 * D)
+       - 0.057 * sind(Mm - 2 * D + Ms) + 0.053 * sind(Mm + 2 * D) + 0.046 * sind(2 * D - Ms) + 0.041 * sind(Mm - Ms)
+       - 0.035 * sind(D) - 0.031 * sind(Mm + Ms) - 0.015 * sind(2 * F - 2 * D) + 0.011 * sind(Mm - 4 * D);
+  lat += -0.173 * sind(F - 2 * D) - 0.055 * sind(Mm - F - 2 * D) - 0.046 * sind(Mm + F - 2 * D)
+       + 0.033 * sind(F + 2 * D) + 0.017 * sind(2 * Mm + F);
+  r += -0.58 * cosd(Mm - 2 * D) - 0.46 * cosd(2 * D);
+  return { lon: norm360(lon), lat, r, sunLon: sun.lon };
+}
+
+// Planeten: heliozentrisch-ekliptikal (AE)
+const PLANETS = [
+  { n: 'Merkur',  el: d => [48.3313 + 3.24587e-5 * d, 7.0047 + 5.00e-8 * d, 29.1241 + 1.01444e-5 * d, 0.387098, 0.205635 + 5.59e-10 * d, 168.6562 + 4.0923344368 * d] },
+  { n: 'Venus',   el: d => [76.6799 + 2.46590e-5 * d, 3.3946 + 2.75e-8 * d, 54.8910 + 1.38374e-5 * d, 0.723330, 0.006773 - 1.302e-9 * d, 48.0052 + 1.6021302244 * d] },
+  { n: 'Erde',    earth: true },
+  { n: 'Mars',    el: d => [49.5574 + 2.11081e-5 * d, 1.8497 - 1.78e-8 * d, 286.5016 + 2.92961e-5 * d, 1.523688, 0.093405 + 2.516e-9 * d, 18.6021 + 0.5240207766 * d] },
+  { n: 'Jupiter', el: d => [100.4542 + 2.76854e-5 * d, 1.3030 - 1.557e-7 * d, 273.8777 + 1.64505e-5 * d, 5.20256, 0.048498 + 4.469e-9 * d, 19.8950 + 0.0830853001 * d] },
+  { n: 'Saturn',  el: d => [113.6634 + 2.38980e-5 * d, 2.4886 - 1.081e-7 * d, 339.3939 + 2.97661e-5 * d, 9.55475, 0.055546 - 9.499e-9 * d, 316.9670 + 0.0334442282 * d] },
+  { n: 'Uranus',  el: d => [74.0005 + 1.3978e-5 * d, 0.7733 + 1.9e-8 * d, 96.6612 + 3.0565e-5 * d, 19.18171 - 1.55e-8 * d, 0.047318 + 7.45e-9 * d, 142.5905 + 0.011725806 * d] },
+  { n: 'Neptun',  el: d => [131.7806 + 3.0173e-5 * d, 1.7700 - 2.55e-7 * d, 272.8461 - 6.027e-6 * d, 30.05826 + 3.313e-8 * d, 0.008606 + 2.15e-9 * d, 260.2471 + 0.005995147 * d] },
+  { n: 'Pluto',   pluto: true },
+];
+function planetHelio(k, d) {
+  const P = PLANETS[k];
+  if (P.pluto) {
+    const S = 50.03 + 0.033459652 * d, Pp = 238.95 + 0.003968789 * d;
+    const lon = 238.9508 + 0.00400703 * d
+      - 19.799 * sind(Pp) + 19.848 * cosd(Pp) + 0.897 * sind(2 * Pp) - 4.956 * cosd(2 * Pp)
+      + 0.610 * sind(3 * Pp) + 1.211 * cosd(3 * Pp) - 0.341 * sind(4 * Pp) - 0.190 * cosd(4 * Pp)
+      + 0.128 * sind(5 * Pp) - 0.034 * cosd(5 * Pp) - 0.038 * sind(6 * Pp) + 0.031 * cosd(6 * Pp)
+      + 0.020 * sind(S - Pp) - 0.010 * cosd(S - Pp);
+    const lat = -3.9082 - 5.453 * sind(Pp) - 14.975 * cosd(Pp) + 3.527 * sind(2 * Pp) + 1.673 * cosd(2 * Pp)
+      - 1.051 * sind(3 * Pp) + 0.328 * cosd(3 * Pp) + 0.179 * sind(4 * Pp) - 0.292 * cosd(4 * Pp)
+      + 0.019 * sind(5 * Pp) + 0.100 * cosd(5 * Pp) - 0.031 * sind(6 * Pp) - 0.026 * cosd(6 * Pp) + 0.011 * cosd(S - Pp);
+    const r = 40.72 + 6.68 * sind(Pp) + 6.90 * cosd(Pp) - 1.18 * sind(2 * Pp) - 0.03 * cosd(2 * Pp)
+      + 0.15 * sind(3 * Pp) - 0.14 * cosd(3 * Pp);
+    return { x: r * cosd(lon) * cosd(lat), y: r * sind(lon) * cosd(lat), z: r * sind(lat) };
+  }
+  const [N, i, w, a, e, M] = P.el(d);
+  const p = orbitXYZ(N, i, w, a, e, norm360(M));
+  if (['Jupiter', 'Saturn', 'Uranus'].includes(P.n)) {      // wichtigste Störungen
+    const Mj = norm360(19.8950 + 0.0830853001 * d), Ms = norm360(316.9670 + 0.0334442282 * d), Mu = norm360(142.5905 + 0.011725806 * d);
+    let lon = atan2d(p.y, p.x), lat = atan2d(p.z, Math.hypot(p.x, p.y));
+    if (P.n === 'Jupiter') lon += -0.332 * sind(2 * Mj - 5 * Ms - 67.6) - 0.056 * sind(2 * Mj - 2 * Ms + 21) + 0.042 * sind(3 * Mj - 5 * Ms + 21)
+      - 0.036 * sind(Mj - 2 * Ms) + 0.022 * cosd(Mj - Ms) + 0.023 * sind(2 * Mj - 3 * Ms + 52) - 0.016 * sind(Mj - 5 * Ms - 69);
+    if (P.n === 'Saturn') {
+      lon += 0.812 * sind(2 * Mj - 5 * Ms - 67.6) - 0.229 * cosd(2 * Mj - 4 * Ms - 2) + 0.119 * sind(Mj - 2 * Ms - 3)
+        + 0.046 * sind(2 * Mj - 6 * Ms - 69) + 0.014 * sind(Mj - 3 * Ms + 32);
+      lat += -0.020 * cosd(2 * Mj - 4 * Ms - 2) + 0.018 * sind(2 * Mj - 6 * Ms - 49);
+    }
+    if (P.n === 'Uranus') lon += 0.040 * sind(Ms - 2 * Mu + 6) + 0.035 * sind(Ms - 3 * Mu + 33) - 0.015 * sind(Mj - Mu + 20);
+    return { x: p.r * cosd(lon) * cosd(lat), y: p.r * sind(lon) * cosd(lat), z: p.r * sind(lat) };
+  }
+  return p;
+}
+// ekliptikal-rechtwinklig (geozentrisch) -> RA/Dec
+function eclToEq(x, y, z, ecl) {
+  const ye = y * cosd(ecl) - z * sind(ecl), ze = y * sind(ecl) + z * cosd(ecl);
+  return { RA: norm360(atan2d(ye, x)), dec: atan2d(ze, Math.hypot(x, ye)), dist: Math.hypot(x, y, z) };
+}
+// Alle Körper zu einem Zeitpunkt (mit Zwischenspeicher, gerundet auf Minuten)
+const ephCache = new Map();
+function ephem(ms) {
+  const key = Math.round(ms / 60000);
+  let e = ephCache.get(key);
+  if (e) return e;
+  const t = key * 60000, d = dayNum(t), ecl = 23.4393 - 3.563e-7 * d;
+  const sun = sunSchlyter(d);
+  const m = moonGeo(d);
+  const moonEq = eclToEq(m.r * cosd(m.lon) * cosd(m.lat), m.r * sind(m.lon) * cosd(m.lat), m.r * sind(m.lat), ecl);
+  const pl = PLANETS.map((P, k) => {
+    if (P.earth) return null;
+    const h = planetHelio(k, d);
+    return eclToEq(h.x + sun.x, h.y + sun.y, h.z, ecl);   // helio -> geozentrisch
+  });
+  const gmst = sunCoords(t).gmst;
+  e = { gmst, moon: { ...moonEq, r: m.r, lon: m.lon, lat: m.lat }, sunLon: sun.lon, sunEq: eclToEq(sun.x, sun.y, 0, ecl), pl };
+  if (ephCache.size > 4000) ephCache.clear();
+  ephCache.set(key, e);
+  return e;
+}
+// Höhe eines Körpers; Mond topozentrisch (Parallaxe, Schlyter Abschnitt 13)
+function bodyAlt(e, body, lat, lon) {
+  const b = body === 'moon' ? e.moon : e.pl[body];
+  let alt = altitude(e.gmst, b.RA, b.dec, lat, lon);
+  if (body === 'moon') alt -= Math.asin(1 / e.moon.r) / DEG * cosd(alt);
+  return alt;
+}
+// Auf-/Untergang innerhalb eines Kalendertags (Abtasten in 10-min-Schritten)
+function riseSetScan(dayStart, body, lat, lon, h0) {
+  let rise = null, set = null, prevT = dayStart, prev = bodyAlt(ephem(dayStart), body, lat, lon) - h0;
+  for (let k = 1; k <= 144; k++) {
+    const t = dayStart + k * 600000, cur = bodyAlt(ephem(t), body, lat, lon) - h0;
+    if (prev < 0 && cur >= 0 && rise === null) rise = prevT + (t - prevT) * (-prev / (cur - prev));
+    if (prev >= 0 && cur < 0 && set === null) set = prevT + (t - prevT) * (prev / (prev - cur));
+    prev = cur; prevT = t;
+  }
+  return { rise, set };
+}
+
+// Nachtsichtbarkeit: Nacht = Sonne unter –6° zwischen 12:00 dieses und 12:00 des nächsten Ortstags
+function nightVisibility(day0, c) {
+  const vis = PLANETS.map(() => false);
+  for (let k = 0; k <= 144; k++) {
+    const t = day0 + 12 * 3600000 + k * 600000, e = ephem(t);
+    if (altitude(e.gmst, e.sunEq.RA, e.sunEq.dec, c.lat, c.lon) > -6) continue;
+    PLANETS.forEach((P, j) => { if (!P.earth && !vis[j] && bodyAlt(e, j, c.lat, c.lon) > 0) vis[j] = true; });
+  }
+  return vis;
+}
+
+// Sonnenauf-/-untergang um den nächstgelegenen Höchststand (h0 = –0,833°)
+function riseSet(ms, lat, lon) {
+  let s = sunCoords(ms);
+  let transit = ms - hourAngle(s.gmst, s.RA, lon) / 360 * 86400000;
+  s = sunCoords(transit);
+  transit -= hourAngle(s.gmst, s.RA, lon) / 360 * 86400000;
+  s = sunCoords(transit);
+  const c = (sind(-0.833) - sind(lat) * sind(s.dec)) / (cosd(lat) * cosd(s.dec));
+  if (c > 1)  return { polar: 'night', dayH: 0 };
+  if (c < -1) return { polar: 'day', dayH: 24 };
+  const H0 = Math.acos(c) / DEG, half = H0 / 360 * 86400000;
+  return { rise: transit - half, set: transit + half, dayH: 2 * H0 / 15 };
+}
+
+// Beginn der Jahreszeiten: Sonnenlänge 0°, 90°, 180°, 270° (Bisektion)
+const seasonCache = {};
+function seasonStarts(year) {
+  if (seasonCache[year]) return seasonCache[year];
+  const guess = [[2, 15], [5, 15], [8, 17], [11, 15]];
+  seasonCache[year] = [0, 90, 180, 270].map((target, k) => {
+    let a = Date.UTC(year, guess[k][0], guess[k][1]), b = a + 14 * 86400000;
+    for (let i = 0; i < 40; i++) {
+      const m = (a + b) / 2;
+      if (wrap180(sunCoords(m).L - target) < 0) a = m; else b = m;
+    }
+    return (a + b) / 2;
+  });
+  return seasonCache[year];
+}
+function seasonOf(L, lat) {
+  const north = ['Frühling', 'Sommer', 'Herbst', 'Winter'], south = ['Herbst', 'Winter', 'Frühling', 'Sommer'];
+  const k = Math.floor(norm360(L) / 90);
+  return (lat >= 0 ? north : south)[k];
+}
+
+// ---------- Zeit in Zeitzonen ----------
+const fmtCache = {};
+function tzParts(ms, tz) {
+  const f = fmtCache[tz] ||= new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const p = {}; for (const x of f.formatToParts(new Date(ms))) p[x.type] = x.value;
+  return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute, s: +p.second };
+}
+function tzOffsetMs(ms, tz) {
+  const p = tzParts(ms, tz);
+  return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000;
+}
+function localToMs(y, mo, d, h, mi, tz) {
+  const guess = Date.UTC(y, mo - 1, d, h, mi);
+  let ms = guess - tzOffsetMs(guess, tz);
+  return guess - tzOffsetMs(ms, tz);
+}
+function berlinToMs(dateStr, timeStr) {
+  const [y, mo, d] = dateStr.split('-').map(Number), [h, mi] = timeStr.split(':').map(Number);
+  return localToMs(y, mo, d, h, mi, 'Europe/Berlin');
+}
+function localDayStart(ms, tz) { const p = tzParts(ms, tz); return localToMs(p.y, p.mo, p.d, 0, 0, tz); }
+const pad = n => String(n).padStart(2, '0');
+const hhmm = (ms, tz) => { const p = tzParts(ms, tz); return `${pad(p.h)}:${pad(p.mi)}`; };
+const ddmm = (ms, tz) => { const p = tzParts(ms, tz); return `${pad(p.d)}.${pad(p.mo)}.`; };
+const clockH = (ms, tz) => { const p = tzParts(ms, tz); return p.h + p.mi / 60 + p.s / 3600; };
+const fmtDeg = (v, pos, neg) => `${Math.abs(v).toFixed(1).replace('.', ',')}° ${v >= 0 ? pos : neg}`;
+const fmtAlt = v => `${v.toFixed(1).replace('.', ',')}°`;
+const fmtDur = h => { let H = Math.floor(h), M = Math.round((h - H) * 60); if (M === 60) { H++; M = 0; } return `${H} h ${pad(M)} min`; };
+
+// ---------- Erdrotation passend zur Sternzeit ----------
+const SPIN0 = (() => {
+  const e0 = new THREE.Vector3(1, 0, 0).applyQuaternion(earthAxis.quaternion);
+  const v = eclDir(0);
+  return Math.atan2(new THREE.Vector3().crossVectors(e0, v).dot(POLE), e0.dot(v));
+})();
+// ekliptikale Länge/Breite -> Richtung in der Szene
+const eclVec = (lon, lat) => eclDir(lon).multiplyScalar(cosd(lat)).add(new THREE.Vector3(0, sind(lat), 0));
+
+// =====================================================================
+// Mond in der Szene: Größe und Abstand maßstabsgetreu (≈ 60 Erdradien)
+// =====================================================================
+const moon = new THREE.Mesh(new THREE.SphereGeometry(R_EARTH * 1737.4 / 6371, 64, 32),
+  new THREE.MeshStandardMaterial({ map: tex('./textures/moon_1024.jpg'), roughness: 1, metalness: 0 }));
+scene.add(moon);
+const moonPath = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xb8c0d8, transparent: true, opacity: 0.45 }));
+scene.add(moonPath);
+let moonPathAt = -1e15;
+function updateMoonPath() {            // Mondbahn ±½ Monat um den jetzigen Zeitpunkt (geozentrisch)
+  const pts = [];
+  for (let k = -36; k <= 36; k++) {
+    const m = moonGeo(dayNum(simMs + k * 0.38 * 86400000));
+    pts.push(eclVec(m.lon, m.lat).multiplyScalar(m.r * R_EARTH));
+  }
+  moonPath.geometry.dispose();
+  moonPath.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+  moonPathAt = simMs;
+}
+
+// ---------- Mondschatten auf der Erde (echte Geometrie im Shader) ----------
+// Für jeden Punkt der Erdoberfläche wird berechnet, wie viel der Sonnenscheibe der Mond verdeckt.
+const ecl = { uSun: { value: new THREE.Vector3() }, uMoon: { value: new THREE.Vector3() },
+              uCenter: { value: new THREE.Vector3() }, uR: { value: R_EARTH } };
+function addEclipse(mat) {
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, ecl);
+    sh.vertexShader = 'varying vec3 vWorldP;\n' + sh.vertexShader.replace('#include <project_vertex>',
+      '#include <project_vertex>\n  vWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = 'varying vec3 vWorldP;\nuniform vec3 uSun; uniform vec3 uMoon; uniform vec3 uCenter; uniform float uR;\n' +
+      sh.fragmentShader.replace('#include <dithering_fragment>', `
+  {
+    vec3 p = (vWorldP - uCenter) / uR;                 // Punkt in Erdradien
+    vec3 a = uSun - p, b = uMoon - p;
+    float dS = length(a), dM = length(b);
+    float rs = 109.08 / dS, rm = 0.27245 / dM;          // Winkelradien von Sonne und Mond
+    float th = atan(length(cross(a, b)), dot(a, b));    // Winkelabstand der Scheibenmitten
+    float f = 0.0;
+    if (dot(b, a) > 0.0 && th < rs + rm) {
+      float full = min(1.0, (rm * rm) / (rs * rs));
+      f = (th <= abs(rs - rm)) ? full : full * (rs + rm - th) / (2.0 * min(rs, rm));
+    }
+    gl_FragColor.rgb *= 1.0 - 0.93 * clamp(f, 0.0, 1.0);
+  }
+  #include <dithering_fragment>`);
+  };
+  mat.needsUpdate = true;
+}
+addEclipse(earthMat);
+addEclipse(clouds.material);
+
+// ---------- Ebenen ----------
+// Ekliptik (Ebene der Erdbahn) und Äquatorebene (senkrecht zur Erdachse) schneiden sich unter 23,44°.
+// Ihre Schnittlinie zeigt zum Frühlingspunkt ♈ (und in Gegenrichtung zum Herbstpunkt).
+function planeDisc(radius, color, opacity) {
+  const g = new THREE.Group();
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 128),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
+  disc.rotation.x = -Math.PI / 2;
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(radius, radius * 0.0025, 6, 256),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 }));
+  rim.rotation.x = -Math.PI / 2;
+  g.add(disc, rim);
+  return g;
+}
+// Alle Ebenen in einer Gruppe: in der Ansicht „Sonnensystem“ um die Sonne, sonst um die Erde.
+const planesGroup = new THREE.Group();
+scene.add(planesGroup);
+const PLANE_R = R_GEO;                                                  // Rand = geostationäre Bahn                                            // beide Scheiben gleich groß
+const eclEarth = planeDisc(PLANE_R, 0x4f7cff, 0.16);                   // Ekliptik durch den Erdmittelpunkt
+planesGroup.add(eclEarth);                                              // nicht geneigt
+{ const l = makeLabel('Ekliptik', '#9db7ff', 0.8); l.position.copy(eclDir(200)).multiplyScalar(PLANE_R * 1.02); eclEarth.add(l); }
+const equPlane = planeDisc(PLANE_R, 0xffb84d, 0.12);                   // Äquatorebene, mit der Erdachse geneigt
+equPlane.quaternion.copy(earthAxis.quaternion);                         // parallel zum Erdäquator
+planesGroup.add(equPlane);
+{ const l = makeLabel('Äquatorebene', '#ffd08a', 0.8); l.position.set(-PLANE_R * 1.02, 0.6, 0); equPlane.add(l); }
+const nodeLine = new THREE.Group();                                     // Schnittlinie beider Ebenen
+planesGroup.add(nodeLine);
+{
+  const v = eclDir(0), len = PLANE_R * 2.3;
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, len, 8), new THREE.MeshBasicMaterial({ color: 0xff6b6b }));
+  rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v);
+  nodeLine.add(rod);
+  const a = makeLabel('Schnittlinie → Frühlingspunkt ♈︎', '#ff8a80', 0.75); a.position.copy(v).multiplyScalar(len / 2 + 1); a.center.set(0, 0.5);
+  const h2 = makeLabel('Herbstpunkt', '#ff8a80', 0.65); h2.position.copy(v).multiplyScalar(-len / 2 - 1); h2.center.set(1, 0.5);
+  nodeLine.add(a, h2);
+}
+
+// ---------- Erdbahn in der Erdansicht ----------
+// Dünne Röhre in echtem Maßstab, aus denselben Formeln wie die Erdposition berechnet,
+// damit die Bahn genau durch den Erdmittelpunkt läuft. Dazu ein Pfeil für die Bewegungsrichtung.
+const earthHelio = ms => { const s = sunCoords(ms); return eclDir(s.L + 180).multiplyScalar(ORBIT_REAL * s.R); };
+const orbitThin = new THREE.Mesh(new THREE.BufferGeometry(),
+  new THREE.MeshBasicMaterial({ color: 0x9fb0d8, transparent: true, opacity: 0.85 }));
+scene.add(orbitThin);
+let orbitThinAt = -1e15;
+function buildOrbitThin() {
+  const pts = [];
+  for (let k = -2048; k <= 2048; k++) pts.push(earthHelio(simMs + k * 0.0894 * 86400000));   // ±183 Tage
+  orbitThin.geometry.dispose();
+  orbitThin.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16384, 0.05, 6, false);
+  orbitThinAt = simMs;
+}
+const motion = new THREE.Group();                      // Pfeil: Bewegungsrichtung der Erde
+scene.add(motion);
+{
+  const col = 0x9fb0d8, len = R_GEO * 0.75;
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, len - 0.6, 8), new THREE.MeshBasicMaterial({ color: col }));
+  shaft.position.y = R_EARTH * 1.3 + (len - 0.6) / 2;
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 16), new THREE.MeshBasicMaterial({ color: col }));
+  head.position.y = R_EARTH * 1.3 + len - 0.3;
+  const lab = makeLabel('Bewegungsrichtung der Erde (≈ 30 km/s)', '#c3cff0', 0.55);
+  lab.position.y = R_EARTH * 1.3 + len + 0.5; lab.center.set(0.5, 0);
+  motion.add(shaft, head, lab);
+}
+
+// ---------- Städte-Markierungen auf der Erde ----------
+const cityMarkers = new THREE.Group();
+earth.add(cityMarkers);
+const markerObjs = [];
+function localPos(lat, lon, r) {          // lokales Erd-System: Greenwich +x, Norden +y, Osten –z
+  return new THREE.Vector3(cosd(lat) * cosd(lon), sind(lat), -cosd(lat) * sind(lon)).multiplyScalar(r);
+}
+
+// =====================================================================
+// Bedienung
+// =====================================================================
+const $ = id => document.getElementById(id);
+const monthEl = $('month');
+
+let simMs = Date.now();
+let anchorMs = simMs;                         // Anfangsdatum für den Monatsregler
+// Abspielen: Pause/Weiter und Geschwindigkeit (Regler logarithmisch oder Eingabefeld)
+const MAX_SPEED = 43200;                                 // 12 h pro Sekunde
+let running = false, started = false, speedSec = 3600;   // läuft erst nach „Start“; 1 h pro Sekunde
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) speedSec = 1;
+const rate = () => speedSec;
+const speedEl = $('speed'), speedNum = $('speedNum'), speedUnit = $('speedUnit');
+const toSlider = s => Math.round(Math.log10(s) / Math.log10(MAX_SPEED) * 1000);
+const fromSlider = v => Math.pow(10, v / 1000 * Math.log10(MAX_SPEED));
+function fmtSpeed(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.round(sec % 60);
+  return [h && `${h} h`, m && `${m} min`, s && `${s} s`].filter(Boolean).join(' ') || '1 s';
+}
+function showSpeed(fromField) {
+  $('playBtn').textContent = running ? 'Pause' : started ? 'Weiter' : 'Start';
+  $('speedVal').textContent = `${speedSec <= 1 ? 'Echtzeit' : fmtSpeed(speedSec) + ' pro Sekunde'}${running ? '' : ' (angehalten)'}`;
+  speedEl.value = toSlider(speedSec);
+  if (!fromField) {                                     // Feld mit passender Einheit füllen
+    const u = speedSec >= 3600 ? 3600 : speedSec >= 60 ? 60 : 1;
+    speedUnit.value = u;
+    speedNum.value = +(speedSec / u).toFixed(2);
+  }
+}
+const setSpeed = (s, fromField) => { speedSec = THREE.MathUtils.clamp(s, 1, MAX_SPEED); showSpeed(fromField); };
+speedEl.addEventListener('input', () => setSpeed(Math.round(fromSlider(Number(speedEl.value)))));
+speedNum.addEventListener('change', () => { const v = parseFloat(speedNum.value); if (v > 0) setSpeed(v * Number(speedUnit.value)); else showSpeed(); });
+speedUnit.addEventListener('change', () => { const v = parseFloat(speedNum.value); if (v > 0) setSpeed(v * Number(speedUnit.value), true); });
+$('playBtn').onclick = () => { running = !running; started = true; showSpeed(); };
 showSpeed();
 
-let running = true, follow = false;
-pauseBtn.onclick = () => { running = !running; pauseBtn.textContent = running ? 'Pause' : 'Weiter'; };
-followBtn.onclick = () => {
-  follow = !follow;
-  followBtn.textContent = follow ? 'Zur Sonne' : 'Zur Erde';
-  if (!follow) { controls.target.set(0, 0, 0); camera.position.set(0, 45, 75); }
-  else {                              // Kamera auf die Tagseite, leicht schräg
-    const toSun = earthAxis.position.clone().negate().normalize();
-    const side = new THREE.Vector3(0, 1, 0).cross(toSun).multiplyScalar(3);
-    camera.position.copy(earthAxis.position).add(toSun.multiplyScalar(6)).add(side).add(new THREE.Vector3(0, 2, 0));
-  }
+// Monatsregler: springt vom Anfangsdatum aus in ganzen Monaten (Berliner Kalender)
+function setAnchor(ms) { anchorMs = ms; monthEl.value = 0; showMonth(); }
+// Tageregler: springt vom Anfangsdatum aus in ganzen Tagen (gleiche Berliner Uhrzeit)
+function addDaysBerlin(ms, k) {
+  const p = tzParts(ms, 'Europe/Berlin');
+  const t = new Date(Date.UTC(p.y, p.mo - 1, p.d + k));
+  return localToMs(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), p.h, p.mi, 'Europe/Berlin');
+}
+function showMonth() {
+  const k = Number(monthEl.value), p = tzParts(addDaysBerlin(anchorMs, k), 'Europe/Berlin');
+  $('monthVal').textContent = `${k > 0 ? '+' : k < 0 ? '−' : '±'}${Math.abs(k)} Tage → ${pad(p.d)}.${pad(p.mo)}.${p.y}`;
+}
+monthEl.addEventListener('input', () => { simMs = addDaysBerlin(anchorMs, Number(monthEl.value)); showMonth(); updateInputs(true); });
+
+$('nowBtn').onclick = () => { simMs = Date.now(); running = true; setSpeed(1); setAnchor(simMs); updateInputs(true); };
+
+const dateIn = $('dateIn'), timeIn = $('timeIn');
+function updateInputs(force) {
+  const p = tzParts(simMs, 'Europe/Berlin');
+  if (force || document.activeElement !== dateIn) dateIn.value = `${p.y}-${pad(p.mo)}-${pad(p.d)}`;
+  if (force || document.activeElement !== timeIn) timeIn.value = `${pad(p.h)}:${pad(p.mi)}`;
+}
+function applyInputs() { if (dateIn.value && timeIn.value) { simMs = berlinToMs(dateIn.value, timeIn.value); setAnchor(simMs); } }
+dateIn.addEventListener('change', applyInputs);
+timeIn.addEventListener('change', applyInputs);
+updateInputs(true);
+showMonth();
+
+// Satellitenauswahl
+const satSel = $('satSel');
+SATS.forEach((d, i) => satSel.add(new Option(`${d.region} – ${d.name}`, i)));
+satSel.value = 2;
+const fmtLon = v => v === 0 ? '0°' : `${Math.abs(v).toString().replace('.', ',')}° ${v > 0 ? 'O' : 'W'}`;
+function showSat() {
+  const k = Number(satSel.value);
+  $('satPos').textContent = fmtLon(SATS[k].lon);
+  satObjs.forEach((o, i) => { o.sat.scale.setScalar(i === k ? 1.6 : 1); o.lab.material.color.set(i === k ? 0xffd36b : 0xffffff); });
+}
+satSel.addEventListener('change', showSat);
+showSat();
+
+// Die Koordinatensysteme sitzen in der Sonne -> nur in der Ansicht „Sonnensystem“ zeigen
+let frameView = 'system';                             // aktuelle Ansicht (von setView gesetzt)
+function showFrames() {
+  const sys = frameView === 'system';
+  frameFixed.visible = frameFixed.userData.extra.visible = $('csFixed').checked && sys;
+  frameRot.visible = $('csRot').checked && sys;
+}
+$('csFixed').addEventListener('change', showFrames);
+$('csRot').addEventListener('change', showFrames);
+showFrames();
+
+document.querySelectorAll('[data-tex]').forEach(b => b.onclick = () => {
+  const k = b.dataset.tex;
+  earthMat.map = textures[k]; earthMat.needsUpdate = true;
+  clouds.visible = (k === 'nature');
+  document.querySelectorAll('[data-tex]').forEach(x => x.setAttribute('aria-pressed', x === b));
+});
+
+// Sonne/Mond-Diagramme direkt am Kasten ein- und ausklappen
+$('curveToggle').onclick = () => {
+  const open = $('curveToggle').getAttribute('aria-expanded') !== 'true';
+  $('curveToggle').setAttribute('aria-expanded', open);
+  $('curveToggle').textContent = open ? '−' : '+';
+  $('curveList').classList.toggle('hidden', !open);
+  $('curveNote').classList.toggle('hidden', !open);
+  $('curveBox').classList.toggle('collapsed', !open);
 };
+$('showPlanets').addEventListener('change', e => $('planetBox').classList.toggle('hidden', !e.target.checked));
+const planetOn = PLANETS.map(P => P.n === 'Mars');          // Start: nur Mars
+PLANETS.forEach((P, k) => {
+  const l = document.createElement('label'); l.className = 'check'; l.style.margin = '0';
+  l.innerHTML = `<input type="checkbox"${planetOn[k] ? ' checked' : ''}> ${P.n}`;
+  l.querySelector('input').addEventListener('change', ev => { planetOn[k] = ev.target.checked; showPlanetRows(); });
+  $('planetChecks').appendChild(l);
+});
+function showPlanetRows() { document.querySelectorAll('#pbody tr').forEach((tr, k) => tr.classList.toggle('hidden', !planetOn[k])); }
+
+// ---------- Städteauswahl (1 bis 3) ----------
+let selected = ['Berlin'];
+$('showCities').addEventListener('change', e => $('cityList').classList.toggle('hidden', !e.target.checked));
+$('showSats').addEventListener('change', () => setView(view));
+$('showEcl').addEventListener('change', () => setView(view));
+$('showEqu').addEventListener('change', () => setView(view));
+const cityList = $('cityList');
+const boxes = {};
+[...new Set(CITIES.map(c => c.r))].forEach(r => {
+  const det = document.createElement('details'); det.open = true;
+  const list = CITIES.filter(c => c.r === r);
+  det.innerHTML = `<summary>${r} (${list.length})</summary>`;
+  list.forEach(c => {
+    const lab = document.createElement('label'); lab.className = 'check';
+    lab.innerHTML = `<input type="checkbox"><span class="dot"></span><span>${c.n}${c.eq ? ' · Äquator' : ''}</span><span class="lat">${fmtDeg(c.lat, 'N', 'S')}</span>`;
+    const box = lab.querySelector('input');
+    box.addEventListener('change', () => {
+      if (box.checked) selected.push(c.n); else selected = selected.filter(n => n !== c.n);
+      refreshCities();
+    });
+    boxes[c.n] = { box, lab, dot: lab.querySelector('.dot') };
+    det.appendChild(lab);
+  });
+  cityList.appendChild(det);
+});
+
+const rows = {};
+function refreshCities() {
+  for (const [n, b] of Object.entries(boxes)) {
+    const i = selected.indexOf(n);
+    b.box.checked = i >= 0;
+    b.dot.style.background = i >= 0 ? SLOT_COLORS[i] : 'transparent';
+    b.box.disabled = i < 0 && selected.length >= 3;          // höchstens 3, auch alle abwählbar
+    b.lab.classList.toggle('disabled', b.box.disabled);
+  }
+  // Markierungen auf dem Globus: Punkt + Name (Größe wird pro Bild an den Abstand angepasst)
+  cityMarkers.clear(); markerObjs.length = 0;
+  selected.forEach((n, i) => {
+    const c = CITIES.find(x => x.n === n);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: SLOT_COLORS[i] }));
+    dot.position.copy(localPos(c.lat, c.lon, R_EARTH * 1.014));
+    const lab = makeLabel(c.n, SLOT_COLORS[i], 1);
+    lab.center.set(-0.08, -0.15);
+    lab.position.copy(dot.position);
+    lab.userData.aspect = lab.scale.x / lab.scale.y;
+    cityMarkers.add(dot, lab);
+    markerObjs.push({ dot, lab });
+  });
+  // Tabelle Sonne/Mond
+  const tb = $('tbody'); tb.innerHTML = '';
+  for (const k in rows) delete rows[k];
+  selected.forEach((n, i) => {
+    const c = CITIES.find(x => x.n === n);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><span class="dot" style="display:inline-block;margin-right:6px;background:${SLOT_COLORS[i]}"></span>${c.n}</td>
+      <td data-k="time"></td><td data-k="season"></td><td data-k="rise"></td><td data-k="set"></td>
+      <td data-k="len"></td><td data-k="night"></td><td data-k="elev"></td><td><canvas class="bar" width="288" height="40" style="width:144px;height:20px"></canvas></td>
+      <td class="moon"><canvas class="mp" width="64" height="64" style="width:32px;height:32px"></canvas><span class="phase"></span></td><td data-k="mrise"></td><td data-k="mset"></td>`;
+    tb.appendChild(tr);
+    rows[n] = { c, i, cells: Object.fromEntries([...tr.querySelectorAll('[data-k]')].map(td => [td.dataset.k, td])),
+                bar: tr.querySelector('canvas.bar'), mp: tr.querySelector('canvas.mp'), moonCell: tr.querySelector('td.moon'), phase: tr.querySelector('.phase') };
+  });
+  // Höhenkurven
+  $('curveList').innerHTML = '';
+  $('curveBox').classList.toggle('hidden', selected.length === 0);
+  selected.forEach((n, i) => {
+    const cv = document.createElement('canvas');
+    cv.className = 'curve'; cv.width = 800; cv.height = 280; cv.style.width = '320px'; cv.style.height = '112px';
+    $('curveList').appendChild(cv);
+    rows[n].curve = cv;
+  });
+  // Tabelle Planeten
+  $('phead').innerHTML = `<tr><th rowspan="2">Planet</th>${selected.map((n, i) =>
+      `<th colspan="3" style="color:${SLOT_COLORS[i]}">${n}</th>`).join('')}</tr>
+    <tr>${selected.map(() => '<th>Aufgang</th><th>Untergang</th><th>Höhe</th>').join('')}</tr>`;
+  $('pbody').innerHTML = PLANETS.map((P, k) => P.earth
+    ? `<tr><td>Erde</td><td colspan="${Math.max(1, selected.length * 3)}" class="note">Standort der Beobachtung</td></tr>`
+    : `<tr><td>${P.n}</td>${selected.map((n, i) => `<td data-p="${k}-${i}-r"></td><td data-p="${k}-${i}-s"></td><td data-p="${k}-${i}-a"></td>`).join('')}</tr>`).join('');
+  showPlanetRows();
+  lastDayKey = '';
+  updateData();
+}
+
+// ---------- Datenfenster ----------
+// Höhe von Sonne und Mond über den Kalendertag der Stadt (alle 10 min) – ergibt die typischen Sinusbögen
+function daySamples(day0, c) {
+  const sun = [], moon = [];
+  for (let k = 0; k <= 144; k++) {
+    const t = day0 + k * 600000, e = ephem(t);
+    sun.push(altitude(e.gmst, e.sunEq.RA, e.sunEq.dec, c.lat, c.lon));
+    moon.push(bodyAlt(e, 'moon', c.lat, c.lon));
+  }
+  return { sun, moon };
+}
+const phaseCv = Object.assign(document.createElement('canvas'), { width: 96, height: 96 });
+function drawCurve(cv, c, smp, nowMs, day0, color) {
+  const x = cv.getContext('2d'), W = cv.width, H = cv.height, L = 70, R = 12, T = 56, B = 28;
+  const px = k => L + (W - L - R) * k / 144, py = a => T + (H - T - B) * (90 - a) / 180;
+  x.clearRect(0, 0, W, H);
+  x.fillStyle = '#0f1630'; x.fillRect(L, T, W - L - R, H - T - B);
+  x.fillStyle = 'rgba(255,255,255,0.05)'; x.fillRect(L, T, W - L - R, py(0) - T);       // über dem Horizont
+  x.font = '22px system-ui, sans-serif'; x.fillStyle = '#8a93a8'; x.textAlign = 'center';
+  for (let hh = 0; hh <= 24; hh += 3) {
+    const xx = px(hh * 6);
+    x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(xx, T, 1.5, H - T - B);
+    x.fillStyle = '#8a93a8'; x.fillText(`${hh}`, xx, H - 4);
+  }
+  x.textAlign = 'right';
+  [90, 0, -90].forEach(a => x.fillText(`${a}°`, L - 8, py(a) + 7));
+  x.strokeStyle = 'rgba(255,255,255,0.55)'; x.lineWidth = 2;                             // Horizont
+  x.beginPath(); x.moveTo(L, py(0)); x.lineTo(W - R, py(0)); x.stroke();
+  const line = (arr, col, w) => {
+    x.strokeStyle = col; x.lineWidth = w; x.beginPath();
+    arr.forEach((a, k) => (k ? x.lineTo(px(k), py(a)) : x.moveTo(px(k), py(a)))); x.stroke();
+    x.fillStyle = col;                                                                   // Auf-/Untergangspunkte
+    for (let k = 1; k < arr.length; k++) if ((arr[k - 1] < 0) !== (arr[k] < 0)) {
+      const f = -arr[k - 1] / (arr[k] - arr[k - 1]);
+      x.beginPath(); x.arc(px(k - 1 + f), py(0), 6, 0, 2 * Math.PI); x.fill();
+    }
+  };
+  line(smp.moon, '#c9d1e6', 3);
+  line(smp.sun, '#f2c94c', 4);
+  const k = (nowMs - day0) / 600000;                                                    // jetzt
+  if (k >= 0 && k <= 144) { x.fillStyle = color; x.fillRect(px(k) - 2, T, 4, H - T - B); }
+  x.textAlign = 'left'; x.font = '600 26px system-ui, sans-serif'; x.fillStyle = color;
+  x.fillText(c.n, L, 36);
+  // Mondphase (gleiche Darstellung wie in der Tabelle) oben rechts
+  const ph = drawMoonPhase(phaseCv, ephem(nowMs), c);
+  x.drawImage(phaseCv, W - R - 52, 2, 50, 50);
+  const letter = ph.k >= 0.98 ? 'V' : ph.k <= 0.02 ? 'N' : ph.waxing ? 'Z' : 'A';
+  x.textAlign = 'right'; x.font = '600 22px system-ui, sans-serif'; x.fillStyle = '#e8ecf4';
+  x.fillText(`${letter} · ${Math.round(ph.k * 100)} %`, W - R - 60, 36);
+}
+
+function drawBar(cv, c, rs, nowMs, color) {
+  const x = cv.getContext('2d'), W = cv.width, H = cv.height;
+  x.fillStyle = '#1b2547'; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#f2c94c';
+  if (rs.polar === 'day') x.fillRect(0, 0, W, H);
+  else if (!rs.polar) {
+    const a = clockH(rs.rise, c.tz) / 24 * W, b = clockH(rs.set, c.tz) / 24 * W;
+    if (b >= a) x.fillRect(a, 0, b - a, H); else { x.fillRect(a, 0, W - a, H); x.fillRect(0, 0, b, H); }
+  }
+  x.fillStyle = 'rgba(255,255,255,0.35)';
+  for (let h = 6; h < 24; h += 6) x.fillRect(h / 24 * W, 0, 2, H);
+  const n = clockH(nowMs, c.tz) / 24 * W;
+  x.fillStyle = '#000'; x.fillRect(n - 4, 0, 8, H);
+  x.fillStyle = color; x.fillRect(n - 2, 0, 4, H);
+}
+
+// Mondphase so, wie sie an diesem Ort gerade am Himmel steht (Zenit oben).
+// Lage des hellen Rands: Positionswinkel χ minus parallaktischer Winkel q (Meeus, Kap. 14 und 48)
+function drawMoonPhase(cv, e, c) {
+  const x = cv.getContext('2d'), W = cv.width, r = W / 2 - 3;
+  const m = e.moon, s = e.sunEq;
+  const elong = Math.acos(cosd(e.sunLon - m.lon) * cosd(m.lat)) / DEG;
+  const k = (1 - cosd(elong)) / 2;                                   // beleuchteter Anteil
+  const chi = atan2d(cosd(s.dec) * sind(s.RA - m.RA), sind(s.dec) * cosd(m.dec) - cosd(s.dec) * sind(m.dec) * cosd(s.RA - m.RA));
+  const H = hourAngle(e.gmst, m.RA, c.lon);
+  const q = atan2d(sind(H), Math.tan(c.lat * DEG) * cosd(m.dec) - sind(m.dec) * cosd(H));
+  const z = (chi - q) * DEG;                                         // vom Zenit aus Richtung Osten (links)
+  const alt = bodyAlt(e, 'moon', c.lat, c.lon);
+  x.clearRect(0, 0, W, W);
+  x.save(); x.translate(W / 2, W / 2);
+  x.globalAlpha = alt > 0 ? 1 : 0.45;
+  x.beginPath(); x.arc(0, 0, r, 0, 2 * Math.PI); x.fillStyle = '#2a2f3d'; x.fill();
+  x.rotate(Math.atan2(-Math.cos(z), -Math.sin(z)));                 // +x zeigt zum hellen Rand
+  x.beginPath();
+  x.arc(0, 0, r, -Math.PI / 2, Math.PI / 2, false);
+  x.ellipse(0, 0, Math.abs(1 - 2 * k) * r, r, 0, Math.PI / 2, -Math.PI / 2, k < 0.5);
+  x.fillStyle = '#f1ead2'; x.fill();
+  x.restore();
+  return { k, alt, waxing: norm360(m.lon - e.sunLon) < 180 };
+}
+
+const mapCv = $('map'), mapCtx = mapCv.getContext('2d');
+const mapBase = document.createElement('canvas'); mapBase.width = 360; mapBase.height = 180;
+let mapBaseReady = false;
+function prepareMapBase() {
+  const img = textures.nature.image;
+  if (!img || !img.width) return;
+  mapBase.width = 920; mapBase.height = 460;
+  mapBase.getContext('2d').drawImage(img, 0, 0, 920, 460);
+  mapBaseReady = true;
+}
+const shade = mapCtx.createImageData(360, 180), shadeCv = Object.assign(document.createElement('canvas'), { width: 360, height: 180 });
+function drawMap(s) {
+  if (!mapBaseReady) prepareMapBase();
+  mapCtx.setTransform(mapCv.width / 360, 0, 0, mapCv.height / 180, 0, 0);   // in 360×180-Koordinaten zeichnen
+  mapCtx.imageSmoothingEnabled = true;
+  mapCtx.fillStyle = '#123'; mapCtx.fillRect(0, 0, 360, 180);
+  if (mapBaseReady) mapCtx.drawImage(mapBase, 0, 0, 360, 180);
+  const sd = sind(s.dec), cd = cosd(s.dec), d = shade.data;
+  for (let yy = 0; yy < 180; yy++) {
+    const lat = 89.5 - yy, sl = sind(lat), cl = cosd(lat);
+    for (let xx = 0; xx < 360; xx++) {
+      const el = Math.asin(sl * sd + cl * cd * cosd(s.gmst + xx - 179.5 - s.RA)) / DEG;
+      const a = el > 0 ? 0 : el < -6 ? 0.72 : 0.72 * (-el / 6);
+      const k = (yy * 360 + xx) * 4;
+      d[k] = 4; d[k + 1] = 8; d[k + 2] = 24; d[k + 3] = a * 255;
+    }
+  }
+  shadeCv.getContext('2d').putImageData(shade, 0, 0);
+  mapCtx.drawImage(shadeCv, 0, 0);
+  mapCtx.strokeStyle = 'rgba(255,255,255,0.18)'; mapCtx.lineWidth = 1;
+  for (let lo = 30; lo < 360; lo += 30) { mapCtx.beginPath(); mapCtx.moveTo(lo, 0); mapCtx.lineTo(lo, 180); mapCtx.stroke(); }
+  for (let la = 30; la < 180; la += 30) { mapCtx.beginPath(); mapCtx.moveTo(0, la); mapCtx.lineTo(360, la); mapCtx.stroke(); }
+  mapCtx.strokeStyle = 'rgba(255,255,255,0.45)'; mapCtx.beginPath(); mapCtx.moveTo(0, 90); mapCtx.lineTo(360, 90); mapCtx.stroke();
+  const sunLon = wrap180(s.RA - s.gmst);
+  mapCtx.font = '16px system-ui'; mapCtx.textAlign = 'center'; mapCtx.textBaseline = 'middle';
+  mapCtx.fillStyle = '#ffd34d'; mapCtx.fillText('☀', sunLon + 180, 90 - s.dec);
+  selected.forEach((n, i) => {
+    const c = CITIES.find(x => x.n === n);
+    mapCtx.beginPath(); mapCtx.arc(c.lon + 180, 90 - c.lat, 4, 0, 2 * Math.PI);
+    mapCtx.fillStyle = SLOT_COLORS[i]; mapCtx.fill(); mapCtx.lineWidth = 1.5; mapCtx.strokeStyle = '#000'; mapCtx.stroke();
+  });
+  mapCtx.setTransform(1, 0, 0, 1, 0, 0);
+  return { sunLon };
+}
+
+let lastDayKey = '', dayCache = {};
+function updateData() {
+  const s = sunCoords(simMs), e = ephem(simMs);
+  // Auf-/Untergänge ändern sich nur mit dem Kalendertag -> nur dann neu abtasten
+  const dayKey = selected.map(n => { const c = CITIES.find(x => x.n === n); return n + localDayStart(simMs, c.tz); }).join('|');
+  const newDay = dayKey !== lastDayKey; lastDayKey = dayKey;
+  selected.forEach((n, i) => {
+    const r = rows[n]; if (!r) return;
+    const { c, cells } = r;
+    const rs = riseSet(simMs, c.lat, c.lon), el = sunElevation(s, c.lat, c.lon);
+    cells.time.textContent = hhmm(simMs, c.tz);
+    cells.season.textContent = Math.abs(c.lat) < 23.44 ? `${seasonOf(s.L, c.lat)} (Tropen)` : seasonOf(s.L, c.lat);
+    cells.rise.textContent = rs.polar ? '–' : hhmm(rs.rise, c.tz);
+    cells.set.textContent = rs.polar ? '–' : hhmm(rs.set, c.tz);
+    cells.len.textContent = rs.polar === 'day' ? 'Polartag' : rs.polar === 'night' ? 'Polarnacht' : fmtDur(rs.dayH);
+    cells.night.textContent = rs.polar === 'day' ? '0 h 00 min' : rs.polar === 'night' ? '24 h 00 min' : fmtDur(24 - rs.dayH);
+    cells.elev.textContent = `${fmtAlt(el)} ${el > 0 ? '☀' : '☾'}`;
+    drawBar(r.bar, c, rs, simMs, SLOT_COLORS[i]);
+    const ph = drawMoonPhase(r.mp, e, c);
+    // V = Vollmond, N = Neumond (je ±2 % beleuchtet), sonst Z = zunehmend, A = abnehmend
+    const letter = ph.k >= 0.98 ? 'V' : ph.k <= 0.02 ? 'N' : ph.waxing ? 'Z' : 'A';
+    r.phase.textContent = letter;
+    r.moonCell.title = `${Math.round(ph.k * 100)} % beleuchtet, ${{ V: 'Vollmond', N: 'Neumond', Z: 'zunehmend', A: 'abnehmend' }[letter]}, Höhe ${fmtAlt(ph.alt)}`;
+    const dayStart = localDayStart(simMs, c.tz);
+    if (newDay || !r.smp) { r.smp = daySamples(dayStart, c); r.day0 = dayStart; }
+    if (r.curve) drawCurve(r.curve, c, r.smp, simMs, dayStart, SLOT_COLORS[i]);
+    if (newDay) {
+      const day0 = dayStart;
+      const mrs = riseSetScan(day0, 'moon', c.lat, c.lon, -0.583);
+      cells.mrise.textContent = mrs.rise ? hhmm(mrs.rise, c.tz) : '–';
+      cells.mset.textContent = mrs.set ? hhmm(mrs.set, c.tz) : '–';
+      const vis = nightVisibility(day0, c);
+      PLANETS.forEach((P, k) => {
+        if (P.earth) return;
+        ['r', 's', 'a'].forEach(x => document.querySelector(`[data-p="${k}-${i}-${x}"]`).classList.toggle('invisible', !vis[k]));
+        const prs = riseSetScan(day0, k, c.lat, c.lon, -0.5667);
+        document.querySelector(`[data-p="${k}-${i}-r"]`).textContent = prs.rise ? hhmm(prs.rise, c.tz) : '–';
+        document.querySelector(`[data-p="${k}-${i}-s"]`).textContent = prs.set ? hhmm(prs.set, c.tz) : '–';
+      });
+    }
+    PLANETS.forEach((P, k) => {
+      if (P.earth) return;
+      const a = altitude(s.gmst, e.pl[k].RA, e.pl[k].dec, c.lat, c.lon);
+      const td = document.querySelector(`[data-p="${k}-${i}-a"]`);
+      td.textContent = fmtAlt(a); td.style.color = a > 0 ? '' : 'var(--muted)';
+    });
+  });
+  const { sunLon } = drawMap(s);
+  const ph = (1 - cosd(Math.acos(cosd(e.sunLon - e.moon.lon) * cosd(e.moon.lat)) / DEG)) / 2;
+  $('sunline').textContent = `Sonne senkrecht über ${fmtDeg(s.dec, 'N', 'S')}, ${fmtDeg(sunLon, 'O', 'W')} · Abstand Erde–Sonne ${(s.R * AU_KM / 1e6).toFixed(2).replace('.', ',')} Mio. km · Mond ${Math.round(ph * 100)} % beleuchtet, Abstand ${Math.round(e.moon.r * R_EARTH_KM).toLocaleString('de-DE')} km`;
+  const yr = tzParts(simMs, 'Europe/Berlin').y, ss = seasonStarts(yr);
+  $('seasonline').textContent = `Jahreszeiten ${yr} (Beginn auf der Nordhalbkugel, Berliner Zeit): ` +
+    ['Frühling', 'Sommer', 'Herbst', 'Winter'].map((nm, k) => `${nm} ${ddmm(ss[k], 'Europe/Berlin')} ${hhmm(ss[k], 'Europe/Berlin')}`).join(' · ') +
+    ' · Südhalbkugel: umgekehrt';
+}
+
+// ---------- Echte Größenverhältnisse (statisches Bild) ----------
+const BODIES = [   // Durchmesser in km (NASA Planetary Fact Sheet; Sonne: 2 × 695 700 km)
+  ['Merkur', 4879, '#a8a29a'], ['Venus', 12104, '#e8c98a'], ['Erde', 12756, '#4f9cff'], ['Mond', 3475, '#cfcfcf'],
+  ['Mars', 6792, '#d0623b'], ['Jupiter', 142984, '#d9b48c'], ['Saturn', 120536, '#e6d29a'],
+  ['Uranus', 51118, '#9fd8e0'], ['Neptun', 49528, '#5677d8'], ['Pluto', 2376, '#c9b8a6']];
+function buildScaleSvg() {
+  const px = 14 / 12756;                           // Erde = 14 Pixel
+  const sunR = 1391400 * px / 2;
+  let x = 175, items = '';
+  BODIES.forEach(([n, dkm, col], k) => {
+    const r = dkm * px / 2;
+    x += r;
+    const ly = 200 + Math.max(r, 6) + 18 + (r < 10 && k % 2 ? 18 : 0);   // kleine Körper: Namen versetzt
+    items += `<circle cx="${x.toFixed(1)}" cy="200" r="${r.toFixed(2)}" fill="${col}"/>` +
+             `<text x="${x.toFixed(1)}" y="${ly}" fill="#e8ecf4" font-size="13" text-anchor="middle">${n}</text>`;
+    x += r + (r < 10 ? 30 : 16);
+  });
+  const W = Math.ceil(x + 10);
+  const moonDist = 384400 * px, geo = 42164 * px;
+  const sunDistPx = 149.6e6 * px;
+  return `
+  <p>Alle Kreise im selben Maßstab: Die Erde ist 14 Pixel groß (1 Pixel ≈ ${Math.round(1 / px).toLocaleString('de-DE')} km).</p>
+  <div class="svgscroll"><svg width="${W}" height="300" viewBox="0 0 ${W} 300" role="img" aria-label="Größen von Sonne, Planeten und Mond im Maßstab">
+    <circle cx="${(150 - sunR).toFixed(1)}" cy="200" r="${sunR.toFixed(1)}" fill="#ffcf5a"/>
+    <text x="20" y="40" fill="#1a1a1a" font-size="16" font-weight="600">Sonne</text>
+    ${items}
+  </svg></div>
+  <p>Abstände im selben Maßstab:</p>
+  <div class="svgscroll"><svg width="${Math.ceil(moonDist + 140)}" height="130" viewBox="0 0 ${Math.ceil(moonDist + 140)} 130" role="img" aria-label="Abstand Erde–Mond im Maßstab">
+    <circle cx="70" cy="70" r="7" fill="#4f9cff"/>
+    <circle cx="70" cy="70" r="${geo.toFixed(1)}" fill="none" stroke="#ffd36b" stroke-dasharray="3 3"/>
+    <circle cx="${(70 + moonDist).toFixed(1)}" cy="60" r="${(3475 * px / 2).toFixed(2)}" fill="#cfcfcf"/>
+    <line x1="78" y1="122" x2="${(70 + moonDist).toFixed(1)}" y2="122" stroke="#8a93a8"/>
+    <text x="${(70 + moonDist / 2).toFixed(1)}" y="112" fill="#e8ecf4" font-size="13" text-anchor="middle">Erde – Mond: 384 400 km</text>
+    <text x="70" y="14" fill="#ffd36b" font-size="12" text-anchor="middle">geostationäre Bahn</text>
+    <text x="70" y="54" fill="#e8ecf4" font-size="13" text-anchor="middle">Erde</text>
+    <text x="${(70 + moonDist).toFixed(1)}" y="56" fill="#e8ecf4" font-size="13" text-anchor="middle">Mond</text>
+  </svg></div>
+  <p>Die Sonne wäre in diesem Maßstab ${Math.round(sunDistPx).toLocaleString('de-DE')} Pixel von der Erde entfernt –
+     etwa ${Math.round(sunDistPx / 1920)} Bildschirmbreiten (Full HD) – und hätte einen Durchmesser von ${Math.round(sunR * 2).toLocaleString('de-DE')} Pixeln.
+     Zwischen Erde und Sonne passen rund ${Math.round(149.6e6 / 12756).toLocaleString('de-DE')} Erden nebeneinander.</p>`;
+}
+const scaleModal = $('scaleModal');
+$('scaleBtn').onclick = () => { $('scaleSvg').innerHTML = buildScaleSvg(); scaleModal.classList.remove('hidden'); $('closeScale').focus(); };
+$('closeScale').onclick = () => scaleModal.classList.add('hidden');
+scaleModal.addEventListener('click', ev => { if (ev.target === scaleModal) scaleModal.classList.add('hidden'); });
+addEventListener('keydown', ev => { if (ev.key === 'Escape') scaleModal.classList.add('hidden'); });
+
+// ---------- Ansichten ----------
+let view = 'system';
+const tmp = new THREE.Vector3(), prevHelio = new THREE.Vector3();
+// In der Sonnensystem-Ansicht wären Erde und Sonne unsichtbar klein -> vergrößert zeichnen
+const BOOST = { earth: 1000, sun: 13 };
+// Mond in der Sonnensystem-Ansicht: wie die Erde 1000-fach vergrößert; damit er nicht in der
+// vergrößerten Erde liegt, wird sein Abstand auf 0,1 AE gestreckt (echt: 0,0026 AE).
+const MOON_SYS = 0.1 * ORBIT_REAL / (60.27 * R_EARTH);
+let moonDistF = 1;
+function applyBoost(on) {
+  const e = on ? BOOST.earth : 1, s = on ? BOOST.sun : 1;
+  earthAxis.scale.setScalar(e); orbitAxis.scale.setScalar(e);
+  sunMesh.scale.setScalar(R_SUN * s); sunGlow.scale.set(R_SUN * 5 * s, R_SUN * 5 * s, 1);
+  ecl.uR.value = R_EARTH * e;
+  moon.scale.setScalar(e);
+  moonDistF = on ? MOON_SYS : 1;
+  moonPath.scale.setScalar(moonDistF);
+}
+function setView(v, restoring) {
+  const keepCamera = v === view && setView.done;
+  setView.done = true;
+  view = v;
+  if (v === 'earth' && !keepCamera && !restoring) {          // beim Wechsel zur Erde: Ebenen an, Satelliten aus
+    $('showEcl').checked = $('showEqu').checked = true;
+    $('showSats').checked = false;
+  }
+  document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', x.dataset.view === v));
+  const nearEarth = v !== 'system';
+  $('satGroup').classList.toggle('hidden', !nearEarth);
+  const sats = $('showSats').checked, showE = $('showEcl').checked, showQ = $('showEqu').checked;
+  geoRing.visible = v === 'earth' && sats;
+  orbitTube.visible = !nearEarth;
+  orbitThin.visible = motion.visible = v === 'earth';
+  frameView = v; showFrames();
+  controls.minDistance = v === 'system' ? 9000 : R_EARTH * 1.3;   // nicht in die Sonne bzw. Erde hineinzoomen
+  satPivot.visible = v === 'earth' && sats;
+  planesGroup.visible = (showE || showQ) && v !== 'sat';
+  eclEarth.visible = showE; equPlane.visible = showQ; nodeLine.visible = showE && showQ;
+  axisArc.visible = v !== 'sat';                                        // Satellitenblick: nur die beiden Achsen
+  (v === 'system' ? helio : scene).add(planesGroup);                    // Sonnensystem: um die Sonne
+  moonPath.visible = v !== 'sat';
+  applyBoost(v === 'system');
+  controls.enabled = v !== 'sat';
+  $('hint').textContent = v === 'sat' ? 'Blick vom geostationären Satelliten'
+    : v === 'system' ? `Erde–Sonne maßstabsgetreu · Erde und Mond 1000-fach, Sonne 13-fach vergrößert · Mondabstand ${Math.round(MOON_SYS)}-fach gestreckt`
+    : 'Alles maßstabsgetreu · Ziehen: drehen · Scrollen: zoomen (Mondbahn weiter außen)';
+  camera.fov = v === 'sat' ? 22 : 45;
+  camera.updateProjectionMatrix();
+  camera.up.set(0, 1, 0);
+  if (keepCamera) return;
+  if (v === 'system') {
+    controls.target.copy(helio.position);
+    camera.position.copy(eclDir(30)).multiplyScalar(ORBIT_REAL * 2.1).setY(ORBIT_REAL * 0.5).add(helio.position);
+  } else if (v === 'earth') {
+    // feste Startansicht (unabhängig vom Datum): Blick etwa aus Richtung Frühlingspunkt, 25° über der Ekliptik
+    const d = 37, el = 25 * DEG;
+    camera.position.copy(eclDir(-6)).multiplyScalar(d * Math.cos(el)).setY(d * Math.sin(el));
+    controls.target.set(0, 0, 0);
+  }
+}
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
 
 // ---------- Animation ----------
-let t = 0, last = performance.now();
-const prevEarth = new THREE.Vector3();
+function placeBodies() {
+  const s = sunCoords(simMs);
+  const p = eclDir(s.L + 180).multiplyScalar(ORBIT_REAL * s.R);   // heliozentrische Erdposition (echt)
+  prevHelio.copy(helio.position);
+  helio.position.copy(p).negate();                                // Erde bleibt im Ursprung
+  frameRot.rotation.y = yawOf(p);
+  // Erdbahn und Bewegungsrichtung (nur Erdansicht)
+  if (view === 'earth') {
+    if (Math.abs(simMs - orbitThinAt) > 20 * 86400000) buildOrbitThin();
+    orbitThin.position.copy(helio.position);
+    const vdir = earthHelio(simMs + 3600000).sub(p).normalize();
+    motion.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vdir);
+  }
+  earth.rotation.y = SPIN0 + s.gmst * DEG;
+  clouds.rotation.y = earth.rotation.y + (simMs / 86400000) * 0.02;
+  // Mond
+  const m = moonGeo(dayNum(simMs)), dir = eclVec(m.lon, m.lat);
+  moon.position.copy(dir).multiplyScalar(m.r * R_EARTH * moonDistF);
+  moon.lookAt(0, 0, 0); moon.rotateY(-Math.PI / 2);   // gebundene Rotation: immer dieselbe Seite zur Erde
+  if (Math.abs(simMs - moonPathAt) > 6 * 3600000) updateMoonPath();
+  // Schatten-Geometrie in echten Abständen (Erdradien)
+  ecl.uSun.value.copy(eclDir(s.L)).multiplyScalar(s.R * ER_PER_AU);
+  ecl.uMoon.value.copy(dir).multiplyScalar(m.r);
+  ecl.uCenter.value.set(0, 0, 0);
+}
+// =====================================================================
+// Lernmodus: Start nur mit Sonne und Infokasten; „Erde und Mond“ blendet beide mit Infos ein;
+// „Simulation“ schaltet auf die volle Simulation um (Einstellungen bleiben erhalten).
+// Daten: NASA Sun/Earth/Moon Fact Sheets
+// =====================================================================
+let simMode = false, savedView = 'system';
+const nf = (v, d = 0) => v.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+const row = (k, v) => `<div class="row"><span>${k}</span><span>${v}</span></div>`;
+// Masse ausgeschrieben (ohne Zehnerpotenzen), mit Zahlwort zum Vorlesen
+// größte benannte Einheit: Billion (1 Billion = 1.000.000.000.000)
+const massRow = digits => `<div class="mass"><span>Masse</span><b>${digits} Billionen kg</b><i>1 Billion = 1.000.000.000.000</i></div>`;
+function renderInfo() {
+  const s = sunCoords(simMs), m = moonGeo(dayNum(simMs));
+  const em = $('lEM').checked;
+  const dES = s.R * AU_KM, dEM = m.r * R_EARTH_KM;
+  $('infoSun').innerHTML = `<h2>☀ Sonne</h2>` +
+    row('Radius', '695.700 km') +
+    massRow('1.988.400.000.000.000.000') +
+    row('Oberflächentemperatur', '≈ 5.500 °C') + row('Temperatur im Kern', '≈ 15,7 Mio. °C') +
+    row('Licht bis zur Erde', '≈ 8 min 19 s') +
+    (em ? `<div class="rel">332.900-mal so schwer wie die Erde<br>109-mal so großer Radius wie die Erde<br>27 Mio.-mal so schwer wie der Mond · 400-mal so großer Radius</div>` : '') +
+    `<div class="src">Quelle: NASA Sun Fact Sheet</div>`;
+  $('infoEarth').innerHTML = `<h2>🌍 Erde</h2>` +
+    row('Radius', '6.371 km') +
+    massRow('5.972.200.000.000') + row('Schwerkraft', '9,8 m/s²') +
+    row('Abstand zur Sonne jetzt', `${nf(dES / 1e6, 2)} Mio. km`) + row('… im Jahr', '147,1 bis 152,1 Mio. km') +
+    row('Umlauf um die Sonne', '365,25 Tage') +
+    `<div class="rel">Die Sonne ist 332.900-mal so schwer wie die Erde und hat einen 109-mal so großen Radius.<br>` +
+    `Die Erde ist 81-mal so schwer wie der Mond und hat einen 3,7-mal so großen Radius.</div>` +
+    `<div class="src">Quelle: NASA Earth/Sun Fact Sheets</div>`;
+  $('infoMoon').innerHTML = `<h2>🌙 Mond</h2>` +
+    row('Radius', '1.737 km') +
+    massRow('73.460.000.000') + row('Schwerkraft', '1,62 m/s² (≈ 1/6 der Erde)') +
+    row('Abstand zur Erde jetzt', `${nf(dEM)} km`) + row('… im Monat', '357.000 bis 407.000 km') +
+    row('Umlauf um die Erde', '27,3 Tage') + row('Von Vollmond zu Vollmond', '29,5 Tage') +
+    `<div class="rel">Die Sonne ist 27 Millionen-mal so schwer wie der Mond und hat einen 400-mal so großen Radius.<br>` +
+    `Die Erde ist 81-mal so schwer wie der Mond und hat einen 3,7-mal so großen Radius.</div>` +
+    `<div class="src">Quelle: NASA Moon Fact Sheet</div>`;
+  $('infoDist').innerHTML = `<h2>↔ Abstände jetzt</h2>` +
+    row('Erde – Sonne', `${nf(dES / 1e6, 2)} Mio. km`) + row('Erde – Mond', `${nf(dEM)} km`) +
+    `<div class="rel">Erde–Sonne ist ${nf(dES / dEM)}-mal so weit wie Erde–Mond.<br>Licht braucht zur Sonne ${nf(dES / 299792.458 / 60, 1)} min, zum Mond ${nf(dEM / 299792.458, 2)} s.</div>`;
+  $('infoSun').classList.toggle('hidden', !$('lSun').checked);
+  ['infoEarth', 'infoMoon', 'infoDist'].forEach(id => $(id).classList.toggle('hidden', !em));
+}
+function applyLearn() {
+  const em = $('lEM').checked;
+  // Lernansicht: nur Sonne (und ggf. Erde/Mond mit Bahn); alles andere aus
+  [planesGroup, frameFixed, frameRot, frameFixed.userData.extra, cityMarkers, moonPath].forEach(o => o.visible = false);
+  earthAxis.visible = orbitAxis.visible = moon.visible = orbitTube.visible = em;
+  sunMesh.visible = sunGlow.visible = true;
+  controls.target.copy(helio.position);
+  camera.position.copy(helio.position).add(em
+    ? eclDir(30).multiplyScalar(ORBIT_REAL * 2.1).setY(ORBIT_REAL * 0.5)
+    : eclDir(30).multiplyScalar(ORBIT_REAL * 0.42).setY(ORBIT_REAL * 0.12));
+  $('hint').textContent = em
+    ? 'Abstand Erde–Sonne maßstabsgetreu · Erde und Mond 1000-fach, Sonne 13-fach vergrößert · Mondabstand gestreckt'
+    : 'Ziehen: drehen · Scrollen: zoomen';
+  renderInfo();
+}
+function setSimMode(on) {
+  simMode = on;
+  document.body.classList.toggle('intro', !on);
+  const learn = $('learn');
+  if (on) {
+    $('input').prepend(learn);                          // Häkchen „Simulation“ bleibt erreichbar
+    earthAxis.visible = orbitAxis.visible = moon.visible = cityMarkers.visible = true;
+    setView.done = false; setView(savedView, true);     // gespeicherte Ansicht und Häkchen wiederherstellen
+    showFrames();
+  } else {
+    if (setView.done) savedView = view;
+    $('main').appendChild(learn);
+    setView('system');
+    applyLearn();
+  }
+}
+$('lSun').addEventListener('change', renderInfo);
+$('lEM').addEventListener('change', applyLearn);
+$('lSim').addEventListener('change', e => setSimMode(e.target.checked));
 
+placeBodies();
+// Beschriftungen in der Erd- und Satellitenansicht: alle gleich groß auf dem Bildschirm
+const LABEL_K = 0.014;                                   // Schrifthöhe relativ zum Abstand
+const uniformLabels = [];
+[planesGroup, motion, axisArc, satPivot].forEach(g => g.traverse(o => { if (o.isSprite) uniformLabels.push(o); }));
+const frameLabels = [];
+[frameFixed, frameRot].forEach(g => g.traverse(o => { if (o.isSprite) frameLabels.push(o); }));
+const wpos = new THREE.Vector3();
+function sizeLabels() {
+  for (const s of frameLabels) {                       // immer gleich groß auf dem Bildschirm
+    s.getWorldPosition(wpos);
+    const h = wpos.distanceTo(camera.position) * LABEL_K / s.parent.getWorldScale(tmp).x;
+    s.scale.set(h * s.userData.aspect, h, 1);
+  }
+  for (const s of uniformLabels) {
+    let h = s.userData.base;
+    if (view !== 'system') {
+      s.getWorldPosition(wpos);
+      const ps = s.parent.getWorldScale(tmp).x;          // Skalierung der Elterngruppe herausrechnen
+      h = wpos.distanceTo(camera.position) * LABEL_K / ps;
+    }
+    s.scale.set(h * s.userData.aspect, h, 1);
+  }
+}
+refreshCities();
+setView('system');
+setSimMode(false);
+
+let last = performance.now(), lastData = 0;
 function animate(now) {
   const dt = Math.min((now - last) / 1000, 0.1); last = now;
-  if (running) t += dt * speed();
+  if (running && simMode && scaleModal.classList.contains('hidden')) simMs += dt * rate() * 1000;
+  placeBodies();
 
-  const p = orbitPos(t);
-  prevEarth.copy(earthAxis.position);
-  earthAxis.position.set(p.x, 0, p.z);
-
-  earth.rotation.y  = 2 * Math.PI * (t / T_DAY);
-  clouds.rotation.y = 2 * Math.PI * (t / T_DAY) * 1.03;   // Wolken leicht schneller
-
-  if (follow) {                         // Kamera mit der Erde mitführen
-    camera.position.add(earthAxis.position.clone().sub(prevEarth));
-    controls.target.copy(earthAxis.position);
+  if (view === 'earth') {
+    controls.update();
+  } else if (view === 'sat') {
+    earthAxis.updateMatrixWorld(true);
+    satObjs[Number(satSel.value)].sat.getWorldPosition(camera.position);
+    camera.up.set(0, 1, 0).applyQuaternion(earthAxis.quaternion);
+    camera.lookAt(0, 0, 0);
+  } else {                                  // Kamera wandert mit der Sonne mit
+    camera.position.add(tmp.copy(helio.position).sub(prevHelio));
+    controls.target.copy(helio.position);
+    controls.update();
   }
-  controls.update();
 
-  dayEl.textContent = Math.floor(((t % T_YEAR) + T_YEAR) % T_YEAR);
-  distEl.textContent = (p.r * AU_KM / 1e6).toFixed(2) + ' Mio. km';
+  // Stadtmarken: klein und abstandsabhängig, Namen erst beim Heranzoomen
+  const dist = camera.position.length(), boost = earthAxis.scale.x;
+  const dotR = THREE.MathUtils.clamp(dist * 0.0035, 0.012, 0.05);
+  const showNames = view !== 'system' && dist < R_EARTH * 8;
+  for (const { dot, lab } of markerObjs) {
+    dot.scale.setScalar(view === 'system' ? 0.05 : dotR);
+    lab.visible = showNames;
+    const h = dist * LABEL_K;
+    lab.scale.set(h * lab.userData.aspect, h, 1);
+  }
 
+  sizeLabels();
+  if (!simMode && now - lastData > 250) renderInfo();
+  if (now - lastData > 250) { updateData(); updateInputs(false); lastData = now; }
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
